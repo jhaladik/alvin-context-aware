@@ -548,14 +548,23 @@ class AdvancedContextAwareTrainer:
         print("=" * 60)
         print()
 
+        # Track starting episode (for resumption)
+        start_episode = len(self.episode_rewards)
+        total_episodes = start_episode + num_episodes
+
+        if start_episode > 0:
+            print(f"Resuming from episode {start_episode}")
+            print(f"Will train {num_episodes} additional episodes (to episode {total_episodes})")
+            print()
+
         best_avg_reward = -float('inf')
 
-        for episode in range(num_episodes):
+        for episode in range(start_episode, total_episodes):
             context = self.sample_context()
             self.context_episode_counts[context] += 1
 
-            # Epsilon decay
-            epsilon = max(0.01, 1.0 - episode / (num_episodes * 0.5))
+            # Epsilon decay (based on total episodes, not just new ones)
+            epsilon = max(0.01, 1.0 - episode / (total_episodes * 0.5))
 
             # Train episode
             reward, length = self.train_episode(context, epsilon)
@@ -617,7 +626,8 @@ class AdvancedContextAwareTrainer:
         print("=" * 60)
         print("TRAINING COMPLETE")
         print("=" * 60)
-        print(f"Total episodes: {num_episodes}")
+        print(f"Total episodes trained: {len(self.episode_rewards)}")
+        print(f"Episodes this session: {num_episodes}")
         print(f"Best avg reward: {best_avg_reward:.2f}")
         print(f"Final epsilon: {epsilon:.3f}")
         print()
@@ -669,6 +679,55 @@ class AdvancedContextAwareTrainer:
 
         print(f"Saved checkpoint: {base_path}")
 
+    def load(self, policy_path, world_model_path=None):
+        """Load checkpoint to resume training"""
+        print(f"Loading checkpoint: {policy_path}")
+
+        # Load policy checkpoint
+        checkpoint = torch.load(policy_path, map_location='cpu', weights_only=False)
+
+        self.policy_net.load_state_dict(checkpoint['policy_net'])
+        self.target_net.load_state_dict(checkpoint['target_net'])
+        self.policy_optimizer.load_state_dict(checkpoint['optimizer'])
+
+        # Restore training state
+        self.episode_rewards = checkpoint.get('episode_rewards', [])
+        self.episode_lengths = checkpoint.get('episode_lengths', [])
+        self.context_episode_counts = checkpoint.get('context_episode_counts',
+                                                      {'snake': 0, 'balanced': 0, 'survival': 0})
+        self.context_avg_rewards = checkpoint.get('context_avg_rewards',
+                                                   {'snake': [], 'balanced': [], 'survival': []})
+        self.steps_done = checkpoint.get('steps_done', 0)
+        self.planning_count = checkpoint.get('planning_count', 0)
+        self.reactive_count = checkpoint.get('reactive_count', 0)
+
+        episodes_trained = len(self.episode_rewards)
+        print(f"  Resuming from episode {episodes_trained}")
+        print(f"  Steps completed: {self.steps_done}")
+        print(f"  Avg reward (last 100): {np.mean(self.episode_rewards[-100:]) if len(self.episode_rewards) >= 100 else np.mean(self.episode_rewards):.2f}")
+
+        # Load world model if provided
+        if world_model_path and os.path.exists(world_model_path):
+            print(f"Loading world model: {world_model_path}")
+            wm_checkpoint = torch.load(world_model_path, map_location='cpu', weights_only=False)
+            self.world_model.load_state_dict(wm_checkpoint['model'])
+            self.world_model_optimizer.load_state_dict(wm_checkpoint['optimizer'])
+            self.world_model_losses = wm_checkpoint.get('losses', [])
+            print(f"  World model losses: {len(self.world_model_losses)} recorded")
+        else:
+            # Try to find world model with same base name
+            base_path = policy_path.replace('_policy.pth', '')
+            auto_wm_path = f"{base_path}_world_model.pth"
+            if os.path.exists(auto_wm_path):
+                print(f"Auto-loading world model: {auto_wm_path}")
+                wm_checkpoint = torch.load(auto_wm_path, map_location='cpu', weights_only=False)
+                self.world_model.load_state_dict(wm_checkpoint['model'])
+                self.world_model_optimizer.load_state_dict(wm_checkpoint['optimizer'])
+                self.world_model_losses = wm_checkpoint.get('losses', [])
+                print(f"  World model loaded successfully")
+
+        print()
+
 
 def main():
     parser = argparse.ArgumentParser(description='Train Advanced Context-Aware Agent')
@@ -679,6 +738,7 @@ def main():
     parser.add_argument('--use-planning', action='store_true', help='Enable world model planning')
     parser.add_argument('--planning-freq', type=float, default=0.2, help='Planning frequency (0-1)')
     parser.add_argument('--planning-horizon', type=int, default=3, help='Planning lookahead steps')
+    parser.add_argument('--resume', type=str, default=None, help='Resume from checkpoint (path to _policy.pth file)')
 
     args = parser.parse_args()
 
@@ -703,6 +763,14 @@ def main():
         planning_freq=args.planning_freq,
         planning_horizon=args.planning_horizon
     )
+
+    # Load checkpoint if resuming
+    if args.resume:
+        trainer.load(args.resume)
+        print("RESUMING TRAINING WITH NEW CONFIGURATION")
+        if args.use_planning:
+            print(f"  Planning NOW ENABLED: {args.planning_freq*100:.0f}% frequency, horizon {args.planning_horizon}")
+        print()
 
     # Train
     trainer.train(num_episodes=args.episodes, log_every=args.log_every)
