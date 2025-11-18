@@ -21,6 +21,7 @@ from core.planning_test_games import PacManGame
 from context_aware_agent import ContextAwareDQN, infer_context_from_observation, add_context_to_observation
 from core.temporal_observer import TemporalFlowObserver
 from core.world_model import WorldModelNetwork
+from train_context_aware_advanced import ContinuousMotivationRewardSystem
 
 
 def visualize_game_state(game, step, score):
@@ -116,13 +117,43 @@ def simulate_rollout(agent, world_model, state, first_action, planning_horizon=5
     return total_return
 
 
-def run_episode(agent, observer, game, world_model=None, planning_freq=0.3, visualize=False, speed=0.0):
+def calculate_distances(game_state):
+    """Calculate nearest pellet and enemy distances"""
+    agent_pos = game_state['agent_pos']
+
+    # Nearest pellet
+    nearest_pellet_dist = None
+    if game_state['rewards']:
+        distances = [abs(p[0] - agent_pos[0]) + abs(p[1] - agent_pos[1])
+                    for p in game_state['rewards']]
+        nearest_pellet_dist = min(distances) if distances else None
+
+    # Nearest enemy
+    nearest_enemy_dist = None
+    if game_state['entities']:
+        distances = [abs(e['pos'][0] - agent_pos[0]) + abs(e['pos'][1] - agent_pos[1])
+                    for e in game_state['entities']]
+        nearest_enemy_dist = min(distances) if distances else None
+
+    return nearest_pellet_dist, nearest_enemy_dist
+
+
+def run_episode(agent, observer, game, world_model=None, planning_freq=0.3,
+                visualize=False, speed=0.0, use_motivation=False):
     """Run one episode of Pac-Man"""
     game.reset()
     observer.reset()
     game_state = game._get_game_state()
 
+    # Initialize continuous motivation system if requested
+    motivation_system = None
+    if use_motivation:
+        motivation_system = ContinuousMotivationRewardSystem(context_name='balanced')
+        motivation_system.reset()
+
     total_reward = 0
+    total_base_reward = 0
+    total_bonus_reward = 0
     steps = 0
     done = False
     pellets_collected = 0
@@ -130,6 +161,16 @@ def run_episode(agent, observer, game, world_model=None, planning_freq=0.3, visu
 
     planning_actions = 0
     reactive_actions = 0
+
+    reward_breakdown_totals = {
+        'env': 0.0,
+        'approach': 0.0,
+        'combo': 0.0,
+        'risk': 0.0,
+        'streak': 0.0,
+        'level': 0.0,
+        'death_penalty': 0.0
+    }
 
     while not done and steps < 1000:
         # Visualize
@@ -153,27 +194,67 @@ def run_episode(agent, observer, game, world_model=None, planning_freq=0.3, visu
 
         # Execute action
         prev_pellets = len(game.pellets)
-        game_state, reward, done = game.step(action)
-        total_reward += reward
+        prev_lives = game.lives
+        game_state, base_reward, done = game.step(action)
         steps += 1
 
-        # Track pellets collected
-        if len(game.pellets) < prev_pellets:
+        # Track pellets collected and deaths
+        collected = len(game.pellets) < prev_pellets
+        died = game.lives < prev_lives
+
+        if collected:
             pellets_collected += 1
+
+        # Apply continuous motivation system if enabled
+        if motivation_system:
+            # Calculate distances for motivation system
+            nearest_pellet_dist, nearest_enemy_dist = calculate_distances(game_state)
+
+            # Build info dict
+            info = {
+                'collected_reward': collected,
+                'died': died
+            }
+
+            # Calculate enhanced reward
+            enhanced_reward, breakdown = motivation_system.calculate_reward(
+                base_reward, info, nearest_pellet_dist, nearest_enemy_dist
+            )
+
+            total_reward += enhanced_reward
+            total_base_reward += base_reward
+            total_bonus_reward += (enhanced_reward - base_reward)
+
+            # Track breakdown
+            for key, value in breakdown.items():
+                reward_breakdown_totals[key] += value
+        else:
+            # Use base reward only
+            total_reward += base_reward
+            total_base_reward += base_reward
 
     if visualize:
         visualize_game_state(game, steps, game_state['score'])
         print(f"\nEpisode finished!")
         print(f"  Total Reward: {total_reward:.2f}")
+        if use_motivation:
+            print(f"    Base Reward: {total_base_reward:.2f}")
+            print(f"    Bonus Reward: {total_bonus_reward:.2f}")
+            print(f"\n  Reward Breakdown:")
+            for key, value in reward_breakdown_totals.items():
+                if abs(value) > 0.1:
+                    print(f"    {key:15s}: {value:+8.2f}")
         print(f"  Pellets Collected: {pellets_collected}/{initial_pellets}")
         print(f"  Planning Actions: {planning_actions}")
         print(f"  Reactive Actions: {reactive_actions}")
         print(f"  Survival: {steps} steps")
         input("\nPress Enter to continue...")
 
-    return {
+    result = {
         'score': game_state['score'],
         'reward': total_reward,
+        'base_reward': total_base_reward,
+        'bonus_reward': total_bonus_reward,
         'steps': steps,
         'pellets_collected': pellets_collected,
         'initial_pellets': initial_pellets,
@@ -181,6 +262,13 @@ def run_episode(agent, observer, game, world_model=None, planning_freq=0.3, visu
         'planning_actions': planning_actions,
         'reactive_actions': reactive_actions
     }
+
+    if use_motivation:
+        result['reward_breakdown'] = reward_breakdown_totals
+        stats = motivation_system.get_stats()
+        result.update(stats)
+
+    return result
 
 
 def main():
@@ -196,6 +284,8 @@ def main():
                        help='Visualization speed in seconds (default: 0.05)')
     parser.add_argument('--planning-freq', type=float, default=0.3,
                        help='Planning frequency 0-1 (default: 0.3)')
+    parser.add_argument('--use-motivation', action='store_true',
+                       help='Use Continuous Motivation System (training rewards)')
 
     args = parser.parse_args()
 
@@ -205,6 +295,7 @@ def main():
     print(f"Model: {args.model}")
     print(f"Episodes: {args.episodes}")
     print(f"Planning Frequency: {args.planning_freq*100:.0f}%")
+    print(f"Reward System: {'CONTINUOUS MOTIVATION (Training)' if args.use_motivation else 'BASE GAME ONLY (Simple)'}")
     print("="*60)
 
     # Load agent
@@ -245,14 +336,18 @@ def main():
         result = run_episode(agent, observer, game, world_model,
                            planning_freq=args.planning_freq,
                            visualize=visualize,
-                           speed=args.speed)
+                           speed=args.speed,
+                           use_motivation=args.use_motivation)
         results.append(result)
 
         if not visualize:
+            reward_str = f"Reward={result['reward']:7.1f}"
+            if args.use_motivation:
+                reward_str += f" (Base={result['base_reward']:6.1f} +Bonus={result['bonus_reward']:6.1f})"
             print(f"Episode {episode+1:3d}: Score={result['score']:3d} "
                   f"Pellets={result['pellets_collected']:3d}/{result['initial_pellets']:3d} "
                   f"({result['completion']*100:5.1f}%) "
-                  f"Reward={result['reward']:7.1f} "
+                  f"{reward_str} "
                   f"Steps={result['steps']:4d}")
 
     # Print summary
@@ -283,6 +378,33 @@ def main():
     print(f"Planning Actions:     {total_planning} ({total_planning/total_actions*100:.1f}%)")
     print(f"Reactive Actions:     {total_reactive} ({total_reactive/total_actions*100:.1f}%)")
     print()
+
+    # Motivation breakdown if applicable
+    if args.use_motivation and 'reward_breakdown' in results[0]:
+        print("MOTIVATION REWARD BREAKDOWN (Average per episode):")
+        print("-"*60)
+        breakdown_sums = {
+            'env': 0, 'approach': 0, 'combo': 0,
+            'risk': 0, 'streak': 0, 'level': 0, 'death_penalty': 0
+        }
+        for r in results:
+            if 'reward_breakdown' in r:
+                for key, value in r['reward_breakdown'].items():
+                    breakdown_sums[key] += value
+
+        for key, value in breakdown_sums.items():
+            avg_value = value / len(results)
+            if abs(avg_value) > 0.1:
+                print(f"  {key:15s}: {avg_value:+8.2f}")
+        print()
+
+        # Show base vs bonus split
+        base_rewards = [r['base_reward'] for r in results]
+        bonus_rewards = [r['bonus_reward'] for r in results]
+        print(f"Base Reward Avg:      {np.mean(base_rewards):8.2f} (game mechanics)")
+        print(f"Bonus Reward Avg:     {np.mean(bonus_rewards):+8.2f} (motivation bonuses)")
+        print(f"Total Reward Avg:     {np.mean(rewards):8.2f}")
+        print()
 
     # Performance assessment
     avg_completion = np.mean(completions)

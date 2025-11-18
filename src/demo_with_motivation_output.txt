@@ -1,0 +1,92 @@
+============================================================
+PAC-MAN PERFORMANCE DEMO
+============================================================
+Model: checkpoints/context_aware_advanced_20251118_202829_best_policy.pth
+Episodes: 50
+Planning Frequency: 30%
+Reward System: CONTINUOUS MOTIVATION (Training)
+============================================================
+[OK] Loaded agent from Episode 260
+[OK] Loaded world model for planning
+
+Episode   1: Score=  9 Pellets=  9/ 77 ( 11.7%) Reward=  278.7 (Base= -65.5 +Bonus= 344.2) Steps=  57
+Episode   2: Score= 15 Pellets= 15/ 86 ( 17.4%) Reward= 1495.5 (Base=  54.0 +Bonus=1441.5) Steps=  58
+Episode   3: Score=  1 Pellets=  1/ 75 (  1.3%) Reward= -365.8 (Base=-228.6 +Bonus=-137.2) Steps=  18
+Episode   4: Score= 14 Pellets= 14/ 75 ( 18.7%) Reward=  467.6 (Base=  35.2 +Bonus= 432.4) Steps=  69
+Episode   5: Score= 12 Pellets= 12/ 85 ( 14.1%) Reward=  550.5 (Base=  -6.9 +Bonus= 557.5) Steps=  46
+Episode   6: Score= 25 Pellets= 25/ 91 ( 27.5%) Reward= 1422.0 (Base= 255.1 +Bonus=1166.9) Steps=  79
+Episode   7: Score= 12 Pellets= 12/ 76 ( 15.8%) Reward=  361.3 (Base=  -6.1 +Bonus= 367.4) Steps=  54
+Episode   8: Score= 14 Pellets= 14/ 83 ( 16.9%) Reward=  559.8 (Base=  36.8 +Bonus= 523.0) Steps=  85
+Episode   9: Score= 15 Pellets= 15/ 84 ( 17.9%) Reward=  787.7 (Base=  53.5 +Bonus= 734.2) Steps=  53
+Episode  10: Score= 35 Pellets= 35/ 89 ( 39.3%) Reward= 2377.5 (Base= 460.4 +Bonus=1917.1) Steps= 142
+Episode  11: Score=  9 Pellets=  9/ 75 ( 12.0%) Reward=   51.3 (Base= -61.1 +Bonus= 112.4) Steps= 101
+Episode  12: Score= 19 Pellets= 19/ 68 ( 27.9%) Reward=  889.2 (Base= 140.0 +Bonus= 749.3) Steps= 122
+Episode  13: Score=  8 Pellets=  8/ 90 (  8.9%) Reward=   60.8 (Base= -87.7 +Bonus= 148.4) Steps=  34
+Episode  14: Score= 41 Pellets= 41/ 89 ( 46.1%) Reward= 3888.7 (Base= 580.9 +Bonus=3307.8) Steps= 153
+Episode  15: Score= 19 Pellets= 19/ 71 ( 26.8%) Reward= 1331.5 (Base= 135.5 +Bonus=1196.0) Steps=  77
+Episode  16: Score= 10 Pellets= 10/ 71 ( 14.1%) Reward=  143.9 (Base= -46.1 +Bonus= 189.9) Steps=  52
+Episode  17: Score=  1 Pellets=  1/ 80 (  1.2%) Reward= -343.5 (Base=-228.7 +Bonus=-114.8) Steps=  17
+Episode  18: Score= 19 Pellets= 19/ 90 ( 21.1%) Reward=  960.3 (Base= 115.9 +Bonus= 844.4) Steps=  80
+Episode  19: Score= 15 Pellets= 15/ 75 ( 20.0%) Reward= 1078.9 (Base=  32.6 +Bonus=1046.3) Steps=  43
+Episode  20: Score= 17 Pellets= 17/ 87 ( 19.5%) Reward= 1398.3 (Base=  97.2 +Bonus=1301.2) Steps=  92
+Episode  21: Score=  7 Pellets=  7/ 77 (  9.1%) Reward=  200.2 (Base=-107.8 +Bonus= 307.9) Steps=  32
+Episode  22: Score= 20 Pellets= 20/ 85 ( 23.5%) Reward= 1025.5 (Base= 156.4 +Bonus= 869.1) Steps=  87
+Episode  23: Score= 18 Pellets= 18/ 78 ( 23.1%) Reward=  711.3 (Base= 117.4 +Bonus= 593.9) Steps=  95
+Episode  24: Score=  5 Pellets=  5/ 91 (  5.5%) Reward=  -50.9 (Base=-144.0 +Bonus=  93.2) Steps=  68
+Episode  25: Score=  5 Pellets=  5/ 89 (  5.6%) Reward=  -98.1 (Base=-168.8 +Bonus=  70.7) Steps=  19
+Episode  26: Score= 22 Pellets= 22/ 87 ( 25.3%) Reward= 1299.6 (Base= 194.1 +Bonus=1105.5) Steps=  66
+Episode  27: Score= 24 Pellets= 24/ 92 ( 26.1%) Reward= 1420.7 (Base= 215.9 +Bonus=1204.8) Steps=  85
+Episode  28: Score=  4 Pellets=  4/ 79 (  5.1%) Reward= -184.4 (Base=-168.1 +Bonus= -16.4) Steps=  26
+Episode  29: Score=  4 Pellets=  4/ 75 (  5.3%) Reward= -114.5 (Base=-188.2 +Bonus=  73.8) Steps=  24
+Episode  30: Score=  4 Pellets=  4/ 71 (  5.6%) Reward= -157.6 (Base=-169.0 +Bonus=  11.4) Steps=  17
+Episode  31: Score= 48 Pellets= 48/ 92 ( 52.2%) Reward= 5433.1 (Base= 702.4 +Bonus=4730.6) Steps= 174
+Episode  32: Score= 23 Pellets= 23/ 84 ( 27.4%) Reward= 1470.2 (Base= 216.8 +Bonus=1253.5) Steps=  94
+Episode  33: Score= 11 Pellets= 11/ 77 ( 14.3%) Reward=  587.3 (Base= -25.7 +Bonus= 613.0) Steps=  57
+Episode  34: Score= 17 Pellets= 17/ 85 ( 20.0%) Reward= 1031.5 (Base=  98.5 +Bonus= 933.0) Steps= 105
+Episode  35: Score=  9 Pellets=  9/ 76 ( 11.8%) Reward=  164.7 (Base= -66.3 +Bonus= 231.0) Steps=  49
+Episode  36: Score= 27 Pellets= 27/ 89 ( 30.3%) Reward= 2447.9 (Base= 298.3 +Bonus=2149.6) Steps= 113
+Episode  37: Score= 15 Pellets= 15/102 ( 14.7%) Reward=  659.5 (Base=  34.5 +Bonus= 625.1) Steps=  62
+Episode  38: Score= 15 Pellets= 15/ 83 ( 18.1%) Reward=  810.8 (Base=  39.6 +Bonus= 771.2) Steps= 113
+Episode  39: Score=  5 Pellets=  5/ 85 (  5.9%) Reward=  -19.9 (Base=-149.0 +Bonus= 129.1) Steps=  18
+Episode  40: Score= 15 Pellets= 15/ 84 ( 17.9%) Reward=  666.5 (Base=  35.0 +Bonus= 631.5) Steps=  67
+Episode  41: Score=  6 Pellets=  6/ 85 (  7.1%) Reward=    9.3 (Base=-148.2 +Bonus= 157.4) Steps=  26
+Episode  42: Score=  9 Pellets=  9/ 74 ( 12.2%) Reward=  331.6 (Base= -66.5 +Bonus= 398.1) Steps=  47
+Episode  43: Score= 11 Pellets= 11/ 92 ( 12.0%) Reward=  211.1 (Base= -26.4 +Bonus= 237.4) Steps=  50
+Episode  44: Score= 19 Pellets= 19/ 82 ( 23.2%) Reward= 1859.7 (Base= 428.0 +Bonus=1431.8) Steps=1000
+Episode  45: Score= 22 Pellets= 22/ 73 ( 30.1%) Reward= 1305.0 (Base= 174.6 +Bonus=1130.5) Steps=  70
+Episode  46: Score= 14 Pellets= 14/ 81 ( 17.3%) Reward=  688.7 (Base=  14.8 +Bonus= 674.0) Steps=  64
+Episode  47: Score= 44 Pellets= 44/ 85 ( 51.8%) Reward= 2917.8 (Base= 633.3 +Bonus=2284.5) Steps= 279
+Episode  48: Score= 14 Pellets= 14/ 84 ( 16.7%) Reward=  430.7 (Base=  35.7 +Bonus= 395.0) Steps=  74
+Episode  49: Score=  3 Pellets=  3/ 80 (  3.8%) Reward= -221.6 (Base=-189.2 +Bonus= -32.4) Steps=  14
+Episode  50: Score=  0 Pellets=  0/ 89 (  0.0%) Reward= -400.3 (Base=-249.2 +Bonus=-151.1) Steps=  11
+
+============================================================
+SUMMARY STATISTICS
+============================================================
+Average Score:        15.00 ± 10.43
+Average Reward:       836.59 ± 1089.21
+Average Completion:   18.0% ± 11.8%
+Average Steps:        88.8 ± 138.4
+
+Best Score:           48
+Best Completion:      52.2%
+Best Reward:          5433.1
+
+Planning Actions:     1305 (29.4%)
+Reactive Actions:     3133 (70.6%)
+
+MOTIVATION REWARD BREAKDOWN (Average per episode):
+------------------------------------------------------------
+  env            :   +55.91
+  approach       :    +2.76
+  combo          :  +616.42
+  risk           :  +288.16
+  streak         :   +28.29
+  death_penalty  :  -154.94
+
+Base Reward Avg:         55.91 (game mechanics)
+Bonus Reward Avg:      +780.69 (motivation bonuses)
+Total Reward Avg:       836.59
+
+Overall Performance:  NEEDS IMPROVEMENT
+============================================================
