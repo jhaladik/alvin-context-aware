@@ -24,9 +24,76 @@ from context_aware_agent import (
 )
 from core.temporal_observer import TemporalFlowObserver
 from core.planning_test_games import SnakeGame, PacManGame, DungeonGame
+from core.world_model import WorldModelNetwork
 
 
-def test_game(agent, observer, game, game_name, num_episodes=50):
+def _plan_action(agent, world_model, state, planning_horizon=5):
+    """Use world model to plan best action via lookahead"""
+    state_tensor = torch.FloatTensor(state).unsqueeze(0)
+
+    best_action = None
+    best_return = -float('inf')
+
+    # Try each action
+    for action in range(4):  # 4 actions: UP, DOWN, LEFT, RIGHT
+        total_return = 0.0
+
+        # Monte Carlo: simulate multiple rollouts
+        num_rollouts = 5
+        for _ in range(num_rollouts):
+            rollout_return = _simulate_rollout(agent, world_model, state_tensor, action, planning_horizon)
+            total_return += rollout_return
+
+        avg_return = total_return / num_rollouts
+
+        if avg_return > best_return:
+            best_return = avg_return
+            best_action = action
+
+    return best_action
+
+
+def _simulate_rollout(agent, world_model, state, first_action, planning_horizon=5):
+    """Simulate one trajectory using world model"""
+    current_state = state.clone()
+    total_return = 0.0
+    discount = 1.0
+    gamma = 0.99
+
+    with torch.no_grad():
+        # Take first action
+        action_tensor = torch.LongTensor([first_action])
+        next_state, reward, done = world_model(current_state, action_tensor)
+        total_return += reward.item() * discount
+        discount *= gamma
+
+        if done.item() > 0.5:
+            return total_return
+
+        current_state = next_state
+
+        # Simulate remaining horizon steps using policy
+        for _ in range(planning_horizon - 1):
+            # Use policy to select action
+            q_values = agent.get_combined_q(current_state)
+            action = q_values.argmax(dim=1).item()
+
+            # Simulate with world model
+            action_tensor = torch.LongTensor([action])
+            next_state, reward, done = world_model(current_state, action_tensor)
+
+            total_return += reward.item() * discount
+            discount *= gamma
+
+            if done.item() > 0.5:
+                break
+
+            current_state = next_state
+
+    return total_return
+
+
+def test_game(agent, observer, game, game_name, num_episodes=50, world_model=None, planning_freq=0.3, planning_horizon=5):
     """Test agent on a specific game"""
     scores = []
     steps_list = []
@@ -59,8 +126,11 @@ def test_game(agent, observer, game, game_name, num_episodes=50):
             # Add context to observation
             obs_with_context = add_context_to_observation(obs, context_vector)
 
-            # Get action
-            action = agent.get_action(obs_with_context, epsilon=0.0)
+            # Get action (with planning if available)
+            if world_model is not None and np.random.random() < planning_freq:
+                action = _plan_action(agent, world_model, obs_with_context, planning_horizon)
+            else:
+                action = agent.get_action(obs_with_context, epsilon=0.0)
 
             # Execute action
             game_state, reward, done = game.step(action)
@@ -99,6 +169,9 @@ def main():
     parser.add_argument('model_path', help='Path to policy checkpoint')
     parser.add_argument('--episodes', type=int, default=50, help='Episodes per game')
     parser.add_argument('--game', choices=['snake', 'pacman', 'dungeon', 'all'], default='all')
+    parser.add_argument('--no-planning', action='store_true', help='Disable world model planning')
+    parser.add_argument('--planning-freq', type=float, default=0.3, help='Planning frequency (0-1)')
+    parser.add_argument('--planning-horizon', type=int, default=5, help='Planning horizon (steps)')
 
     args = parser.parse_args()
 
@@ -112,11 +185,32 @@ def main():
 
     print(f"  Episodes trained: {len(checkpoint.get('episode_rewards', []))}")
     print(f"  Steps: {checkpoint.get('steps_done', 0)}")
+    print(f"  Planning actions: {checkpoint.get('planning_count', 0)}")
+    print(f"  Reactive actions: {checkpoint.get('reactive_count', 0)}")
 
     if 'context_episode_counts' in checkpoint:
         print(f"  Training context distribution:")
         for ctx, count in checkpoint['context_episode_counts'].items():
             print(f"    {ctx}: {count} episodes")
+
+    # Load world model for planning
+    world_model = None
+    if not args.no_planning:
+        base_path = args.model_path.replace('_policy.pth', '')
+        world_model_path = f"{base_path}_world_model.pth"
+
+        if os.path.exists(world_model_path):
+            print(f"\nLoading world model for planning: {world_model_path}")
+            world_model = WorldModelNetwork(state_dim=95, action_dim=4)
+            wm_checkpoint = torch.load(world_model_path, map_location='cpu', weights_only=False)
+            world_model.load_state_dict(wm_checkpoint['model'])
+            world_model.eval()
+            print(f"  Planning ENABLED: {args.planning_freq*100:.0f}% frequency, horizon {args.planning_horizon}")
+        else:
+            print(f"\n  Warning: World model not found at {world_model_path}")
+            print(f"  Planning DISABLED - will use policy only")
+
+    print()
 
     observer = TemporalFlowObserver()
 
@@ -125,15 +219,24 @@ def main():
 
     if args.game in ['snake', 'all']:
         game = SnakeGame(size=15)
-        results['snake'] = test_game(agent, observer, game, "Snake", args.episodes)
+        results['snake'] = test_game(agent, observer, game, "Snake", args.episodes,
+                                     world_model=world_model,
+                                     planning_freq=args.planning_freq,
+                                     planning_horizon=args.planning_horizon)
 
     if args.game in ['pacman', 'all']:
         game = PacManGame(size=15)
-        results['pacman'] = test_game(agent, observer, game, "Pac-Man", args.episodes)
+        results['pacman'] = test_game(agent, observer, game, "Pac-Man", args.episodes,
+                                      world_model=world_model,
+                                      planning_freq=args.planning_freq,
+                                      planning_horizon=args.planning_horizon)
 
     if args.game in ['dungeon', 'all']:
         game = DungeonGame(size=20)
-        results['dungeon'] = test_game(agent, observer, game, "Dungeon", args.episodes)
+        results['dungeon'] = test_game(agent, observer, game, "Dungeon", args.episodes,
+                                       world_model=world_model,
+                                       planning_freq=args.planning_freq,
+                                       planning_horizon=args.planning_horizon)
 
     # Summary
     if len(results) > 1:

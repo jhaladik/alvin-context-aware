@@ -17,6 +17,7 @@ from context_aware_agent import (
     add_context_to_observation
 )
 from core.temporal_observer import TemporalFlowObserver
+from core.world_model import WorldModelNetwork
 
 # Colors
 BLACK = (0, 0, 0)
@@ -36,11 +37,15 @@ PURPLE = (128, 0, 128)
 class ContextAwareVisualRunner:
     """Run games with context-aware agent and visual rendering"""
 
-    def __init__(self, model_path, cell_size=25):
+    def __init__(self, model_path, cell_size=25, use_planning=True, planning_freq=0.3, planning_horizon=5):
         self.cell_size = cell_size
+        self.use_planning = use_planning
+        self.planning_freq = planning_freq
+        self.planning_horizon = planning_horizon
 
         # Load context-aware agent
         self.agent = None
+        self.world_model = None
         self.observer = TemporalFlowObserver()
         self.current_context = None
         self.current_context_name = "Unknown"
@@ -50,9 +55,28 @@ class ContextAwareVisualRunner:
             self.agent = ContextAwareDQN(obs_dim=95, action_dim=4)
             self.agent.load_state_dict(checkpoint['policy_net'])
             self.agent.eval()
+
+            # Load world model for planning
+            base_path = model_path.replace('_policy.pth', '')
+            world_model_path = f"{base_path}_world_model.pth"
+
+            if use_planning and os.path.exists(world_model_path):
+                print(f"Loading world model for planning: {world_model_path}")
+                self.world_model = WorldModelNetwork(state_dim=95, action_dim=4)
+                wm_checkpoint = torch.load(world_model_path, map_location='cpu', weights_only=False)
+                self.world_model.load_state_dict(wm_checkpoint['model'])
+                self.world_model.eval()
+                print(f"  Planning ENABLED: {planning_freq*100:.0f}% frequency, horizon {planning_horizon}")
+            elif use_planning:
+                print(f"  Warning: World model not found at {world_model_path}")
+                print(f"  Planning DISABLED - will use policy only")
+                self.use_planning = False
+
             print(f"Loaded context-aware agent: {model_path}")
             print(f"  Episodes trained: {len(checkpoint.get('episode_rewards', []))}")
             print(f"  Input: 95-dim (92 temporal + 3 context)")
+            print(f"  Planning actions: {checkpoint.get('planning_count', 0)}")
+            print(f"  Reactive actions: {checkpoint.get('reactive_count', 0)}")
         else:
             print("No agent loaded - manual control only")
 
@@ -117,6 +141,70 @@ class ContextAwareVisualRunner:
             if len(self.current_obs) > 90:
                 self.danger_trend = self.current_obs[88]
                 self.progress_rate = self.current_obs[90]
+
+    def _plan_action(self, state):
+        """Use world model to plan best action via lookahead"""
+        state_tensor = torch.FloatTensor(state).unsqueeze(0)
+
+        best_action = None
+        best_return = -float('inf')
+
+        # Try each action
+        for action in range(4):  # 4 actions: UP, DOWN, LEFT, RIGHT
+            total_return = 0.0
+
+            # Monte Carlo: simulate multiple rollouts
+            num_rollouts = 5
+            for _ in range(num_rollouts):
+                rollout_return = self._simulate_rollout(state_tensor, action)
+                total_return += rollout_return
+
+            avg_return = total_return / num_rollouts
+
+            if avg_return > best_return:
+                best_return = avg_return
+                best_action = action
+
+        return best_action
+
+    def _simulate_rollout(self, state, first_action):
+        """Simulate one trajectory using world model"""
+        current_state = state.clone()
+        total_return = 0.0
+        discount = 1.0
+        gamma = 0.99
+
+        with torch.no_grad():
+            # Take first action
+            action_tensor = torch.LongTensor([first_action])
+            next_state, reward, done = self.world_model(current_state, action_tensor)
+            total_return += reward.item() * discount
+            discount *= gamma
+
+            if done.item() > 0.5:
+                return total_return
+
+            current_state = next_state
+
+            # Simulate remaining horizon steps using policy
+            for _ in range(self.planning_horizon - 1):
+                # Use policy to select action
+                q_values = self.agent.get_combined_q(current_state)
+                action = q_values.argmax(dim=1).item()
+
+                # Simulate with world model
+                action_tensor = torch.LongTensor([action])
+                next_state, reward, done = self.world_model(current_state, action_tensor)
+
+                total_return += reward.item() * discount
+                discount *= gamma
+
+                if done.item() > 0.5:
+                    break
+
+                current_state = next_state
+
+        return total_return
 
     def draw_snake(self):
         """Draw snake game"""
@@ -477,8 +565,13 @@ class ContextAwareVisualRunner:
                 # Add context to observation
                 obs_with_context = add_context_to_observation(obs, self.current_context)
 
-                # Get action
-                action = self.agent.get_action(obs_with_context, epsilon=0.0)
+                # Get action with planning if available
+                if self.use_planning and self.world_model and np.random.random() < self.planning_freq:
+                    # Use world model planning
+                    action = self._plan_action(obs_with_context)
+                else:
+                    # Use policy network
+                    action = self.agent.get_action(obs_with_context, epsilon=0.0)
 
                 # Update temporal info for display
                 self._update_temporal_info()
@@ -510,6 +603,9 @@ def main():
     parser = argparse.ArgumentParser(description='Context-Aware Visual Test Games')
     parser.add_argument('--model', type=str, default=None, help='Path to context-aware agent model')
     parser.add_argument('--speed', type=int, default=10, help='Game speed (FPS)')
+    parser.add_argument('--no-planning', action='store_true', help='Disable world model planning')
+    parser.add_argument('--planning-freq', type=float, default=0.3, help='Planning frequency (0-1)')
+    parser.add_argument('--planning-horizon', type=int, default=5, help='Planning horizon (steps)')
     args = parser.parse_args()
 
     print("=" * 60)
@@ -538,7 +634,18 @@ def main():
     print("  Detection rays show what agent 'sees'")
     print()
 
-    runner = ContextAwareVisualRunner(model_path=args.model)
+    if not args.no_planning:
+        print("PLANNING:")
+        print(f"  Enabled: {args.planning_freq*100:.0f}% of actions")
+        print(f"  Horizon: {args.planning_horizon} steps lookahead")
+        print()
+
+    runner = ContextAwareVisualRunner(
+        model_path=args.model,
+        use_planning=not args.no_planning,
+        planning_freq=args.planning_freq,
+        planning_horizon=args.planning_horizon
+    )
     runner.run(speed=args.speed)
 
 
