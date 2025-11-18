@@ -19,6 +19,15 @@ from context_aware_agent import (
 from core.temporal_observer import TemporalFlowObserver
 from core.world_model import WorldModelNetwork
 
+# Import continuous motivation system for tracking
+import sys
+sys.path.insert(0, os.path.dirname(__file__))
+try:
+    from train_context_aware_advanced import ContinuousMotivationRewardSystem
+except ImportError:
+    ContinuousMotivationRewardSystem = None
+    print("Warning: ContinuousMotivationRewardSystem not available")
+
 # Colors
 BLACK = (0, 0, 0)
 WHITE = (255, 255, 255)
@@ -77,8 +86,25 @@ class ContextAwareVisualRunner:
             print(f"  Input: 95-dim (92 temporal + 3 context)")
             print(f"  Planning actions: {checkpoint.get('planning_count', 0)}")
             print(f"  Reactive actions: {checkpoint.get('reactive_count', 0)}")
+
+            # NEW: Display level progression info
+            if 'context_levels' in checkpoint:
+                print(f"\n  Level Progression from Training:")
+                for ctx in ['snake', 'balanced', 'survival']:
+                    level = checkpoint['context_levels'].get(ctx, 1)
+                    completions = checkpoint.get('level_completions', {}).get(ctx, 0)
+                    print(f"    {ctx:8s}: Level {level} - {completions} completions")
+
+                # Store level info for display
+                self.trained_levels = checkpoint.get('context_levels', {})
+                self.level_completions = checkpoint.get('level_completions', {})
+            else:
+                self.trained_levels = {}
+                self.level_completions = {}
         else:
             print("No agent loaded - manual control only")
+            self.trained_levels = {}
+            self.level_completions = {}
 
         # Initialize pygame
         pygame.init()
@@ -101,20 +127,31 @@ class ContextAwareVisualRunner:
         self.danger_trend = 0
         self.progress_rate = 0
 
+        # NEW: Continuous motivation tracking
+        self.reward_system = None
+        self.combo_count = 0
+        self.survival_streak = 0
+        self.current_level = 1
+        self.pellets_collected = 0
+        self.last_pellet_dist = None
+
     def switch_game(self, game_type):
         """Switch to a different game"""
         if game_type == 'snake':
-            self.current_game = SnakeGame(size=15)
+            self.current_game = SnakeGame(size=20)  # MATCH TRAINING: 20x20
             self.game_name = "SNAKE"
-            self.grid_size = 15
+            self.grid_size = 20
+            context_name = 'snake'
         elif game_type == 'pacman':
-            self.current_game = PacManGame(size=15)
+            self.current_game = PacManGame(size=20)  # MATCH TRAINING: 20x20
             self.game_name = "PAC-MAN"
-            self.grid_size = 15
+            self.grid_size = 20
+            context_name = 'balanced'  # Pac-Man uses balanced context
         elif game_type == 'dungeon':
-            self.current_game = DungeonGame(size=20)
+            self.current_game = DungeonGame(size=20)  # MATCH TRAINING: 20x20
             self.game_name = "DUNGEON"
             self.grid_size = 20
+            context_name = 'survival'  # Dungeon uses survival context
 
         self.game_state = self.current_game.reset()
         self.observer.reset()
@@ -122,6 +159,16 @@ class ContextAwareVisualRunner:
         self.steps = 0
         self.last_action = -1
         self._update_temporal_info()
+
+        # NEW: Initialize continuous motivation system
+        if ContinuousMotivationRewardSystem is not None:
+            self.reward_system = ContinuousMotivationRewardSystem(context_name)
+            self.reward_system.reset()
+            self.combo_count = 0
+            self.survival_streak = 0
+            self.pellets_collected = 0
+            self.last_pellet_dist = None
+            self.current_level = 1
 
         # Resize window
         width = self.grid_size * self.cell_size + 220
@@ -236,12 +283,12 @@ class ContextAwareVisualRunner:
                        (hx * self.cell_size + 1, hy * self.cell_size + 1,
                         self.cell_size - 2, self.cell_size - 2))
 
-        # Draw food
-        fx, fy = game.food
-        pygame.draw.circle(self.screen, RED,
-                         (int((fx + 0.5) * self.cell_size),
-                          int((fy + 0.5) * self.cell_size)),
-                         int(self.cell_size * 0.4))
+        # Draw food pellets (multiple pellets in Snake game)
+        for fx, fy in game.food_positions:
+            pygame.draw.circle(self.screen, RED,
+                             (int((fx + 0.5) * self.cell_size),
+                              int((fy + 0.5) * self.cell_size)),
+                             int(self.cell_size * 0.4))
 
         # Draw direction arrow and detection rays
         self._draw_direction_arrow(hx, hy)
@@ -477,7 +524,47 @@ class ContextAwareVisualRunner:
         progress_text = f'Progress: {self.progress_rate:.3f}'
         progress_render = self.small_font.render(progress_text, True, progress_color)
         self.screen.blit(progress_render, (panel_x, y))
-        y += 20
+        y += 30
+
+        # NEW: CONTINUOUS MOTIVATION INFO
+        if self.reward_system is not None:
+            motivation_header = self.font.render('MOTIVATION', True, GOLD)
+            self.screen.blit(motivation_header, (panel_x, y))
+            y += 25
+
+            # Combo
+            combo_color = YELLOW if self.combo_count > 0 else GRAY
+            combo_text = f'Combo: x{self.combo_count}'
+            combo_render = self.small_font.render(combo_text, True, combo_color)
+            self.screen.blit(combo_render, (panel_x, y))
+            y += 20
+
+            # Survival Streak
+            streak_color = GREEN if self.survival_streak > 50 else WHITE
+            streak_text = f'Streak: {self.survival_streak}'
+            streak_render = self.small_font.render(streak_text, True, streak_color)
+            self.screen.blit(streak_render, (panel_x, y))
+            y += 20
+
+            # Level (show current and trained max)
+            trained_level = 1
+            context_map = {'SNAKE': 'snake', 'PAC-MAN': 'balanced', 'DUNGEON': 'survival'}
+            if self.game_name in context_map and hasattr(self, 'trained_levels'):
+                trained_level = self.trained_levels.get(context_map[self.game_name], 1)
+
+            level_text = f'Level: {self.current_level}/{trained_level}'
+            level_render = self.small_font.render(level_text, True, CYAN)
+            self.screen.blit(level_render, (panel_x, y))
+            y += 20
+
+            # Show training completions
+            if hasattr(self, 'level_completions') and self.game_name in context_map:
+                completions = self.level_completions.get(context_map[self.game_name], 0)
+                if completions > 0:
+                    comp_text = f'Trained: {completions}x'
+                    comp_render = self.small_font.render(comp_text, True, GRAY)
+                    self.screen.blit(comp_render, (panel_x, y))
+                    y += 20
 
         # Controls
         y = self.grid_size * self.cell_size + 10
@@ -578,18 +665,43 @@ class ContextAwareVisualRunner:
 
             # Take step
             if action is not None:
+                prev_score = self.score
                 self.game_state, reward, done = self.current_game.step(action)
                 self.score = self.game_state.get('score', 0)
                 self.steps = self.current_game.steps
                 self.last_action = action
 
+                # NEW: Update continuous motivation tracking
+                if self.reward_system is not None:
+                    # Check if score increased (pellet collected)
+                    collected = self.score > prev_score
+                    if collected:
+                        self.pellets_collected += 1
+                        self.combo_count = self.reward_system.combo_count
+
+                    # Update survival streak
+                    if not done:
+                        self.survival_streak = self.reward_system.steps_alive
+
+                    # Get stats for display
+                    stats = self.reward_system.get_stats()
+                    self.combo_count = stats['combo']
+                    self.survival_streak = stats['streak']
+
                 if done:
                     print(f"{self.game_name} finished! Score: {self.score} | Context: {self.current_context_name}")
+                    print(f"  Combo: {self.combo_count} | Streak: {self.survival_streak} | Pellets: {self.pellets_collected}")
                     # Auto reset
                     self.game_state = self.current_game.reset()
                     self.observer.reset()
                     self.score = 0
                     self.steps = 0
+                    # Reset motivation tracking
+                    if self.reward_system is not None:
+                        self.reward_system.reset()
+                        self.combo_count = 0
+                        self.survival_streak = 0
+                        self.pellets_collected = 0
 
             # Draw
             self.draw()
