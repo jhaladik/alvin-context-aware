@@ -15,9 +15,9 @@ import torch
 import numpy as np
 import random
 import argparse
-from temporal_observer import TemporalFlowObserver
-from temporal_agent import TemporalHierarchicalDQN
-from world_model import WorldModelNetwork, PlanningAgent
+from .temporal_observer import TemporalFlowObserver
+from .temporal_agent import TemporalHierarchicalDQN
+from .world_model import WorldModelNetwork, PlanningAgent
 
 
 class PlanningGameAgent:
@@ -100,19 +100,17 @@ class SnakeGame:
             walls.add((0, i))
             walls.add((self.size-1, i))
 
+        # FIX: Snake body segments should NOT be treated as external entities!
+        # The agent's own body is not a threat to avoid - it's part of self-collision
         entities = []
-        for segment in self.snake[1:]:
-            entities.append({
-                'pos': segment,
-                'velocity': (0, 0),
-                'danger': 1.0
-            })
+        # Don't add snake body as entities - this was causing wrong context detection
 
         return {
             'agent_pos': self.snake[0],
             'walls': walls,
             'rewards': [self.food],
             'entities': entities,
+            'grid_size': (self.size, self.size),  # FIX: Add grid_size for observer
             'score': self.score,
             'done': self.done
         }
@@ -217,6 +215,7 @@ class PacManGame:
             'walls': self.walls,
             'rewards': list(self.pellets),
             'entities': entities,
+            'grid_size': (self.size, self.size),  # FIX: Add grid_size for observer
             'score': self.score,
             'done': self.done
         }
@@ -334,6 +333,7 @@ class DungeonGame:
             'walls': self.walls,
             'rewards': [self.treasure],
             'entities': entities,
+            'grid_size': (self.size, self.size),  # FIX: Add grid_size for observer
             'score': self.score,
             'done': self.done
         }

@@ -19,7 +19,6 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "core"))
 import torch
 import numpy as np
 import argparse
-import os
 from datetime import datetime
 from collections import deque
 from context_aware_agent import (
@@ -27,8 +26,8 @@ from context_aware_agent import (
     infer_context_from_observation,
     add_context_to_observation
 )
-from temporal_env import TemporalRandom2DEnv
-from world_model import WorldModelNetwork, WorldModelTrainer
+from core.temporal_env import TemporalRandom2DEnv
+from core.world_model import WorldModelNetwork, WorldModelTrainer
 
 
 class ContextAwareTrainer:

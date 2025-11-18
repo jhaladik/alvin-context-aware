@@ -4,7 +4,7 @@ Random mazes with temporal understanding for foundation agent.
 """
 import numpy as np
 import random
-from temporal_observer import TemporalFlowObserver
+from .temporal_observer import TemporalFlowObserver
 
 
 class TemporalRandom2DEnv:

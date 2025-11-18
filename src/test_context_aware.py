@@ -22,8 +22,8 @@ from context_aware_agent import (
     infer_context_from_observation,
     add_context_to_observation
 )
-from temporal_observer import TemporalFlowObserver
-from planning_test_games import SnakeGame, PacManGame, DungeonGame
+from core.temporal_observer import TemporalFlowObserver
+from core.planning_test_games import SnakeGame, PacManGame, DungeonGame
 
 
 def test_game(agent, observer, game, game_name, num_episodes=50):

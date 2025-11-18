@@ -10,13 +10,13 @@ import os
 
 sys.path.insert(0, os.path.dirname(__file__))
 
-from planning_test_games import SnakeGame, PacManGame, DungeonGame
+from core.planning_test_games import SnakeGame, PacManGame, DungeonGame
 from context_aware_agent import (
     ContextAwareDQN,
     infer_context_from_observation,
     add_context_to_observation
 )
-from temporal_observer import TemporalFlowObserver
+from core.temporal_observer import TemporalFlowObserver
 
 # Colors
 BLACK = (0, 0, 0)

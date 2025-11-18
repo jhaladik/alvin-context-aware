@@ -11,7 +11,7 @@ Input: 95 features = 92 temporal + 3 context
 import torch
 import torch.nn as nn
 import numpy as np
-from temporal_agent import TemporalHierarchicalDQN, TemporalTrainer
+from core.temporal_agent import TemporalHierarchicalDQN, TemporalTrainer
 
 
 class ContextAwareDQN(nn.Module):
@@ -127,12 +127,13 @@ def infer_context_from_observation(obs):
         [0,0,1] if 4+ entities
     """
     # Count detected entities from rays
-    # Each ray has: [entity_dist, entity_danger, wall_dist]
+    # FIX: Each ray actually has: [reward_dist, entity_dist, wall_dist]
+    # (See temporal_observer.py:148-158 - reward first, then entity, then wall)
     # Entity detected if entity_dist < 0.9
 
     entity_count = 0
     for i in range(8):  # 8 rays
-        entity_dist = obs[i * 3]  # Every 3rd element starting from 0
+        entity_dist = obs[i * 3 + 1]  # FIX: Entity is at offset +1, not 0!
         if entity_dist < 0.9:  # Entity detected in this direction
             entity_count += 1
 
