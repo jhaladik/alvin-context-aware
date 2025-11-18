@@ -1,0 +1,150 @@
+================================================================================
+DEEP TRAINING DATA ANALYSIS
+================================================================================
+Checkpoint: context_aware_advanced_20251118_202829_best_policy.pth
+
+BASIC STATISTICS
+--------------------------------------------------------------------------------
+Total Episodes:       260
+Total Steps:          83,005
+Planning Actions:     5,575
+Reactive Actions:     77,430
+
+REWARD ANALYSIS
+--------------------------------------------------------------------------------
+Mean Reward:          2538.08
+Median Reward:        1053.90
+Std Reward:           3528.44
+Min Reward:           -387.85
+Max Reward:           21663.80
+
+REWARD DISTRIBUTION
+--------------------------------------------------------------------------------
+  <0          :   31 episodes ( 11.9%)
+  0-100       :   10 episodes (  3.8%)
+  100-500     :   39 episodes ( 15.0%)
+  500-1000    :   45 episodes ( 17.3%)
+  1000-5000   :   87 episodes ( 33.5%)
+  5000-10000  :   36 episodes ( 13.8%)
+  >10000      :   12 episodes (  4.6%)
+
+CONTEXT-SPECIFIC PERFORMANCE
+--------------------------------------------------------------------------------
+SNAKE   :
+  Episodes:           84
+  Current Level:      5
+  Level Completions:  53
+  Mean Reward:        5045.74
+  Median Reward:      3085.90
+  Max Reward:         21663.80
+  Recent 10 Mean:     8222.57
+  HUGE REWARDS (>10k): 11 episodes!
+
+BALANCED:
+  Episodes:           131
+  Current Level:      5
+  Level Completions:  18
+  Mean Reward:        1505.75
+  Median Reward:      846.35
+  Max Reward:         11168.15
+  Recent 10 Mean:     2165.19
+  HUGE REWARDS (>10k): 1 episodes!
+
+SURVIVAL:
+  Episodes:           45
+  Current Level:      5
+  Level Completions:  6
+  Mean Reward:        862.31
+  Median Reward:      363.10
+  Max Reward:         7159.60
+  Recent 10 Mean:     803.25
+
+LEVEL COMPLETION BONUS BREAKDOWN
+--------------------------------------------------------------------------------
+Bonus structure per level completion:
+  Level 1: +100
+  Level 2: +200
+  Level 3: +400
+  Level 4: +800
+  Level 5: +1600
+
+  snake     :  53 completions × ~800 = ~42,400 bonus points
+  balanced  :  18 completions × ~800 = ~14,400 bonus points
+  survival  :   6 completions × ~800 = ~4,800 bonus points
+  TOTAL ESTIMATED LEVEL BONUSES: ~61,600 points
+
+TRAINING PHASES ANALYSIS
+--------------------------------------------------------------------------------
+Early (0-50)        : Mean= 1097.17, Max= 9496.55, Median=  246.52
+Mid-Early (50-100)  : Mean= 2566.34, Max=12555.75, Median=  938.00
+Mid (100-150)       : Mean= 2442.11, Max= 9850.35, Median= 1205.03
+Mid-Late (150-200)  : Mean= 3861.54, Max=21663.80, Median= 1922.45
+Late (200-260)      : Mean= 2692.35, Max=16828.05, Median=  862.43
+
+EPISODE LENGTH ANALYSIS
+--------------------------------------------------------------------------------
+Mean Length:          319.2 steps
+Median Length:        130.5 steps
+Max Length:           1000 steps
+Min Length:           19 steps
+
+Reward-Length Correlation: 0.657
+  -> Strong positive: Longer episodes = higher rewards
+
+================================================================================
+REWARD COMPOSITION ESTIMATE
+================================================================================
+
+Training rewards include:
+  1. Base game rewards:
+     - Movement: +0.1 per step
+     - Pellet collection: +20
+     - Death penalty: -50 to -100
+
+  2. Continuous Motivation bonuses:
+     - Approach gradient: +0.5 per tile closer
+     - Combo system: 2x, 4x, 6x multipliers
+     - Risk multiplier: 3x near enemies
+     - Survival streaks: +50, +100, +200, +300
+     - Level completion: +100, +200, +400, +800, +1600
+
+Example breakdown for 16,000 reward episode:
+  - Level 5 completion bonus:     +1,600
+  - 30 pellets with combos:       +1,000 (avg 33 per pellet)
+  - Approach gradient bonuses:    +500
+  - Survival streak bonuses:      +650 (50+100+200+300)
+  - Base movement (500 steps):    +50
+  - Additional multipliers:       +12,200
+  TOTAL:                          ~16,000
+
+*** CRITICAL: These bonuses are TRAINING ONLY!
+    Test/demo runs use BASE GAME REWARDS ONLY
+    This explains the 100x difference!
+
+================================================================================
+CONCLUSION
+================================================================================
+
+The massive gap between training and test performance is explained:
+
+  Training: Uses Continuous Motivation System
+    - Level completion bonuses (up to +1600 per level)
+    - Combo multipliers (2x, 4x, 6x)
+    - Survival streak bonuses (+650 total)
+    - Approach gradient rewards
+    -> Average reward: ~3000-5000
+    -> Max reward: 21,663!
+
+  Testing: Uses BASE GAME REWARDS ONLY
+    - Pellet collection: +20
+    - Movement: +0.1 per step
+    - Death penalty: -50 to -100
+    -> Average reward: ~30-50
+    -> Max realistic: ~500
+
+RECOMMENDATION:
+  Either:
+  1. Apply same reward system during testing (fair comparison)
+  2. Train with simpler rewards (more realistic)
+  3. Report BOTH metrics separately
+
