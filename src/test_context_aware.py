@@ -193,6 +193,14 @@ def main():
         for ctx, count in checkpoint['context_episode_counts'].items():
             print(f"    {ctx}: {count} episodes")
 
+    # NEW: Display level progression info if available
+    if 'context_levels' in checkpoint:
+        print(f"  Level Progression:")
+        for ctx in ['snake', 'balanced', 'survival']:
+            level = checkpoint['context_levels'].get(ctx, 1)
+            completions = checkpoint.get('level_completions', {}).get(ctx, 0)
+            print(f"    {ctx:8s}: Level {level} - {completions} completions")
+
     # Load world model for planning
     world_model = None
     if not args.no_planning:
@@ -212,27 +220,51 @@ def main():
 
     print()
 
+    # Extract level configurations from checkpoint (if available)
+    level_configs = {}
+    if 'context_levels' in checkpoint:
+        print("TESTING WITH TRAINING-LEVEL DIFFICULTY:")
+        for ctx in ['snake', 'balanced', 'survival']:
+            level = checkpoint['context_levels'].get(ctx, 1)
+            completions = checkpoint.get('level_completions', {}).get(ctx, 0)
+            print(f"  {ctx:8s}: Testing at Level {level} difficulty (trained {completions} completions)")
+
+            # Map context to game difficulty
+            if ctx == 'snake':
+                level_configs['snake'] = {'level': level, 'enemies': 0}  # Snake = no enemies
+            elif ctx == 'balanced':
+                level_configs['pacman'] = {'level': level, 'enemies': level + 1}  # Pac-Man = balanced
+            elif ctx == 'survival':
+                level_configs['dungeon'] = {'level': level, 'enemies': level + 3}  # Dungeon = survival
+        print()
+
     observer = TemporalFlowObserver()
 
     # Test games
     results = {}
 
     if args.game in ['snake', 'all']:
-        game = SnakeGame(size=15)
+        game = SnakeGame(size=20)  # MATCH TRAINING: 20x20
+        if 'snake' in level_configs:
+            print(f"[Snake Game: Level {level_configs['snake']['level']} difficulty]\n")
         results['snake'] = test_game(agent, observer, game, "Snake", args.episodes,
                                      world_model=world_model,
                                      planning_freq=args.planning_freq,
                                      planning_horizon=args.planning_horizon)
 
     if args.game in ['pacman', 'all']:
-        game = PacManGame(size=15)
+        game = PacManGame(size=20)  # MATCH TRAINING: 20x20
+        if 'pacman' in level_configs:
+            print(f"[Pac-Man Game: Level {level_configs['pacman']['level']} difficulty]\n")
         results['pacman'] = test_game(agent, observer, game, "Pac-Man", args.episodes,
                                       world_model=world_model,
                                       planning_freq=args.planning_freq,
                                       planning_horizon=args.planning_horizon)
 
     if args.game in ['dungeon', 'all']:
-        game = DungeonGame(size=20)
+        game = DungeonGame(size=20)  # MATCH TRAINING: 20x20
+        if 'dungeon' in level_configs:
+            print(f"[Dungeon Game: Level {level_configs['dungeon']['level']} difficulty]\n")
         results['dungeon'] = test_game(agent, observer, game, "Dungeon", args.episodes,
                                        world_model=world_model,
                                        planning_freq=args.planning_freq,

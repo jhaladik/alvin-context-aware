@@ -29,6 +29,174 @@ from core.temporal_env import TemporalRandom2DEnv
 from core.world_model import WorldModelNetwork
 
 
+class ContinuousMotivationRewardSystem:
+    """
+    Comprehensive reward system with 5 components for continuous motivation:
+
+    1. APPROACH GRADIENT: Reward getting closer to pellets (+0.5 per tile)
+    2. COMBO SYSTEM: Increasing rewards for chaining collections (2x, 4x, 6x...)
+    3. RISK MULTIPLIER: 3x reward for collecting near enemies (dist < 3)
+    4. SURVIVAL STREAK: Milestone bonuses at 50, 100, 200, 300 steps alive
+    5. LEVEL PROGRESSION: Complete levels for exponential bonuses (100, 200, 400, 800)
+
+    Each component targets different Q-heads:
+    - Approach + Combo → COLLECT head
+    - Risk multiplier → AVOID + COLLECT synergy
+    - Survival streak → SURVIVE + AVOID heads
+    - Levels → Long-term POSITION + PLANNING
+    """
+
+    def __init__(self, context_name='balanced'):
+        self.context_name = context_name
+        self.reset()
+
+        # Level configuration per context
+        self.level_configs = {
+            'snake': {
+                1: {'pellets': 10, 'enemies': 0, 'completion_bonus': 100},
+                2: {'pellets': 15, 'enemies': 0, 'completion_bonus': 200},
+                3: {'pellets': 20, 'enemies': 1, 'completion_bonus': 400},
+                4: {'pellets': 25, 'enemies': 1, 'completion_bonus': 800},
+                5: {'pellets': 30, 'enemies': 2, 'completion_bonus': 1600},
+            },
+            'balanced': {
+                1: {'pellets': 10, 'enemies': 2, 'completion_bonus': 100},
+                2: {'pellets': 15, 'enemies': 3, 'completion_bonus': 200},
+                3: {'pellets': 20, 'enemies': 4, 'completion_bonus': 400},
+                4: {'pellets': 25, 'enemies': 5, 'completion_bonus': 800},
+                5: {'pellets': 30, 'enemies': 6, 'completion_bonus': 1600},
+            },
+            'survival': {
+                1: {'pellets': 8, 'enemies': 4, 'completion_bonus': 150},
+                2: {'pellets': 12, 'enemies': 5, 'completion_bonus': 300},
+                3: {'pellets': 15, 'enemies': 6, 'completion_bonus': 600},
+                4: {'pellets': 20, 'enemies': 7, 'completion_bonus': 1200},
+                5: {'pellets': 25, 'enemies': 8, 'completion_bonus': 2400},
+            }
+        }
+
+    def reset(self):
+        """Reset for new episode"""
+        self.combo_count = 0
+        self.combo_timer = 0
+        self.steps_alive = 0
+        self.last_pellet_dist = None
+        self.pellets_collected_this_episode = 0
+        self.episode_start_step = 0
+
+    def get_current_level_config(self, level):
+        """Get configuration for current level"""
+        config = self.level_configs[self.context_name]
+        return config.get(level, config[5])  # Default to level 5 if higher
+
+    def calculate_reward(self, env_reward, info, nearest_pellet_dist, nearest_enemy_dist):
+        """
+        Calculate enhanced reward based on all 5 components
+
+        Args:
+            env_reward: Original reward from environment
+            info: Info dict from environment step
+            nearest_pellet_dist: Distance to nearest pellet
+            nearest_enemy_dist: Distance to nearest enemy
+
+        Returns:
+            total_reward: Enhanced reward
+            reward_breakdown: Dict with component rewards for logging
+        """
+        total_reward = 0.0
+        breakdown = {
+            'env': env_reward,
+            'approach': 0.0,
+            'combo': 0.0,
+            'risk': 0.0,
+            'streak': 0.0,
+            'level': 0.0,
+            'death_penalty': 0.0
+        }
+
+        # COMPONENT 1: APPROACH GRADIENT
+        # Continuous feedback for moving toward pellets
+        if nearest_pellet_dist is not None and self.last_pellet_dist is not None:
+            if nearest_pellet_dist < self.last_pellet_dist:
+                breakdown['approach'] = 0.5  # Getting closer
+            else:
+                breakdown['approach'] = -0.1  # Getting farther
+        self.last_pellet_dist = nearest_pellet_dist
+
+        # COMPONENT 2: COMBO SYSTEM + COMPONENT 3: RISK MULTIPLIER
+        # Combo builds with each collection, risk multiplies reward
+        collected = info.get('collected_reward', False)
+        if collected:
+            self.pellets_collected_this_episode += 1
+            self.combo_count += 1
+
+            # Base combo reward (increases with chain)
+            base_pellet_reward = 10.0
+            combo_bonus = self.combo_count * 2.0  # +2, +4, +6, +8...
+            pellet_reward = base_pellet_reward + combo_bonus
+
+            # Risk multiplier (3x if collecting near enemies)
+            risk_mult = 1.0
+            if nearest_enemy_dist is not None:
+                if nearest_enemy_dist < 3.0:
+                    risk_mult = 3.0  # Very risky!
+                    breakdown['risk'] = pellet_reward * 2.0  # Extra from multiplier
+                elif nearest_enemy_dist < 5.0:
+                    risk_mult = 2.0
+                    breakdown['risk'] = pellet_reward * 1.0
+
+            breakdown['combo'] = pellet_reward * risk_mult
+
+            # Reset combo timer (have 20 steps to get next pellet)
+            self.combo_timer = 20
+        else:
+            # Combo timer decay
+            if self.combo_timer > 0:
+                self.combo_timer -= 1
+                if self.combo_timer <= 0:
+                    # Combo broken!
+                    breakdown['combo'] = -5.0
+                    self.combo_count = 0
+
+        # COMPONENT 4: SURVIVAL STREAK
+        # Milestone bonuses and continuous survival reward
+        self.steps_alive += 1
+
+        # Continuous survival reward
+        breakdown['streak'] = 0.05
+
+        # Milestone bonuses (exponential)
+        milestones = [50, 100, 200, 300, 400, 500]
+        for milestone in milestones:
+            if self.steps_alive == milestone:
+                milestone_bonus = milestone * 0.5  # +25, +50, +100, +150...
+                breakdown['streak'] += milestone_bonus
+                break
+
+        # Death penalty (lose streak progress)
+        if info.get('died', False):
+            streak_loss = self.steps_alive * 0.1
+            breakdown['death_penalty'] = -(50.0 + streak_loss)
+            breakdown['streak'] = 0  # No streak reward this step
+            self.steps_alive = 0
+            self.combo_count = 0
+            self.combo_timer = 0
+
+        # Sum all components
+        total_reward = sum(breakdown.values())
+
+        return total_reward, breakdown
+
+    def get_stats(self):
+        """Get current stats for logging"""
+        return {
+            'combo': self.combo_count,
+            'combo_timer': self.combo_timer,
+            'streak': self.steps_alive,
+            'pellets': self.pellets_collected_this_episode
+        }
+
+
 class PrioritizedReplayBuffer:
     """
     Prioritized Experience Replay Buffer
@@ -356,6 +524,15 @@ class AdvancedContextAwareTrainer:
         self.context_episode_counts = {'snake': 0, 'balanced': 0, 'survival': 0}
         self.context_avg_rewards = {'snake': [], 'balanced': [], 'survival': []}
 
+        # ENHANCEMENT 4: Level Progression & Continuous Motivation
+        self.context_levels = {'snake': 1, 'balanced': 1, 'survival': 1}
+        self.reward_systems = {
+            'snake': ContinuousMotivationRewardSystem('snake'),
+            'balanced': ContinuousMotivationRewardSystem('balanced'),
+            'survival': ContinuousMotivationRewardSystem('survival')
+        }
+        self.level_completions = {'snake': 0, 'balanced': 0, 'survival': 0}
+
         print("=" * 60)
         print("ADVANCED CONTEXT-AWARE TRAINER INITIALIZED")
         print("=" * 60)
@@ -369,11 +546,15 @@ class AdvancedContextAwareTrainer:
             print(f"      - Planning frequency: {planning_freq*100:.0f}%")
             print(f"      - Planning horizon: {planning_horizon} steps")
         print(f"  [3] Q-Head Analysis: YES (tracks dominance per context)")
+        print(f"  [4] Continuous Motivation: YES (5 reward components)")
+        print(f"      - Approach gradient, Combo system, Risk multiplier")
+        print(f"      - Survival streaks, Level progression")
         print()
-        print("CONTEXT DISTRIBUTION:")
+        print("CONTEXT DISTRIBUTION & STARTING LEVELS:")
         for context, prob in self.context_distribution.items():
-            entities = self.context_configs[context]
-            print(f"  {context:8s}: {prob*100:4.0f}% (entities: {entities[0]}-{entities[1]})")
+            level = self.context_levels[context]
+            config = self.reward_systems[context].get_current_level_config(level)
+            print(f"  {context:8s}: {prob*100:4.0f}% | Level {level}: {config['pellets']} pellets, {config['enemies']} enemies")
         print()
 
     def sample_context(self):
@@ -383,16 +564,18 @@ class AdvancedContextAwareTrainer:
         return np.random.choice(contexts, p=probs)
 
     def create_env_for_context(self, context):
-        """Create environment with appropriate num_entities for context"""
-        min_entities, max_entities = self.context_configs[context]
-        num_entities = np.random.randint(min_entities, max_entities + 1)
+        """Create environment based on current level configuration"""
+        # Get level configuration
+        current_level = self.context_levels[context]
+        level_config = self.reward_systems[context].get_current_level_config(current_level)
 
+        # Create environment with level-specific settings
         env = TemporalRandom2DEnv(
             grid_size=(self.env_size, self.env_size),
-            num_entities=num_entities,
-            num_rewards=self.num_rewards
+            num_entities=level_config['enemies'],
+            num_rewards=level_config['pellets']
         )
-        return env, num_entities
+        return env, level_config
 
     def get_context_vector(self, context):
         """Get one-hot context vector for training"""
@@ -403,16 +586,53 @@ class AdvancedContextAwareTrainer:
         else:
             return np.array([0.0, 0.0, 1.0], dtype=np.float32)
 
+    def extract_distances_from_obs(self, obs):
+        """
+        Extract nearest pellet and enemy distances from observation
+
+        Observation structure (from temporal_observer.py):
+        - Ray observations: 8 rays × 3 values = 24 features
+          Each ray: [reward_dist, entity_dist, wall_dist]
+        - Features 46-47: reward_direction_x, reward_direction_y
+        - Feature 40: nearest_entity_distance
+
+        Returns:
+            nearest_pellet_dist, nearest_enemy_dist (both 0-1 normalized)
+        """
+        # Get nearest entity distance (feature 40)
+        if len(obs) > 40:
+            nearest_enemy_dist = obs[40]
+        else:
+            nearest_enemy_dist = 1.0  # Max distance (normalized)
+
+        # Get nearest pellet distance from rays (features 0-23)
+        # Every 3rd element starting from 0 is reward_dist
+        pellet_distances = [obs[i] for i in range(0, min(24, len(obs)), 3)]
+        nearest_pellet_dist = min(pellet_distances) if pellet_distances else 1.0
+
+        # Convert from normalized (0=close, 1=far) to actual distances (approx)
+        # Multiply by ray_length=10 to get rough tile distance
+        nearest_pellet_dist = nearest_pellet_dist * 10.0
+        nearest_enemy_dist = nearest_enemy_dist * 10.0
+
+        return nearest_pellet_dist, nearest_enemy_dist
+
     def train_episode(self, context, epsilon):
-        """Train one episode with given context"""
-        env, num_entities = self.create_env_for_context(context)
+        """Train one episode with given context and continuous motivation"""
+        env, level_config = self.create_env_for_context(context)
+
+        # ENHANCEMENT 4: Reset reward system for new episode
+        reward_system = self.reward_systems[context]
+        reward_system.reset()
 
         obs = env.reset()
         context_vector = self.get_context_vector(context)
         obs_with_context = add_context_to_observation(obs, context_vector)
 
         episode_reward = 0
+        episode_enhanced_reward = 0
         episode_length = 0
+        level_completed = False
 
         done = False
         while not done and episode_length < 1000:
@@ -430,14 +650,48 @@ class AdvancedContextAwareTrainer:
                 self.q_head_analyzer.analyze_step(self.policy_net, obs_with_context, context)
 
             # Execute action
-            next_obs, reward, done, _ = env.step(action)
+            next_obs, env_reward, done, info = env.step(action)
             next_obs_with_context = add_context_to_observation(next_obs, context_vector)
 
-            # Store transition in prioritized replay buffer
+            # ENHANCEMENT 4: Calculate enhanced reward with continuous motivation
+            # Extract distances for reward calculation
+            pellet_dist, enemy_dist = self.extract_distances_from_obs(next_obs)
+
+            # Calculate enhanced reward
+            enhanced_reward, reward_breakdown = reward_system.calculate_reward(
+                env_reward, info, pellet_dist, enemy_dist
+            )
+
+            # Check for level completion (all pellets collected)
+            if info.get('rewards_left', 0) == 0 and not level_completed:
+                level_completed = True
+                current_level = self.context_levels[context]
+                completion_bonus = level_config['completion_bonus']
+                enhanced_reward += completion_bonus
+                reward_breakdown['level'] = completion_bonus
+
+                # Advance to next level
+                self.context_levels[context] = min(5, current_level + 1)
+                self.level_completions[context] += 1
+
+                # Level completed but don't end episode - spawn new level!
+                # Reset environment with new level config
+                new_level_config = reward_system.get_current_level_config(self.context_levels[context])
+                env = TemporalRandom2DEnv(
+                    grid_size=(self.env_size, self.env_size),
+                    num_entities=new_level_config['enemies'],
+                    num_rewards=new_level_config['pellets']
+                )
+                next_obs = env.reset()
+                next_obs_with_context = add_context_to_observation(next_obs, context_vector)
+                done = False  # Continue playing!
+                level_completed = False  # Reset for next level
+
+            # Store transition in prioritized replay buffer (use enhanced reward!)
             transition = {
                 'state': obs_with_context.copy(),
                 'action': action,
-                'reward': reward,
+                'reward': enhanced_reward,  # IMPORTANT: Use enhanced reward for training!
                 'next_state': next_obs_with_context.copy(),
                 'done': done
             }
@@ -458,11 +712,12 @@ class AdvancedContextAwareTrainer:
                 self.target_net.load_state_dict(self.policy_net.state_dict())
 
             obs_with_context = next_obs_with_context
-            episode_reward += reward
+            episode_reward += env_reward
+            episode_enhanced_reward += enhanced_reward
             episode_length += 1
             self.steps_done += 1
 
-        return episode_reward, episode_length
+        return episode_enhanced_reward, episode_length
 
     def _train_policy_step(self):
         """Train policy with prioritized replay"""
@@ -595,13 +850,25 @@ class AdvancedContextAwareTrainer:
                     plan_pct = (self.planning_count / total_actions * 100) if total_actions > 0 else 0
                     print(f"  Planning: {plan_pct:.1f}% ({self.planning_count}/{total_actions})")
 
-                # Context breakdown
-                print("  Context Distribution:")
+                # Context breakdown with level progression
+                print("  Context Distribution & Levels:")
                 for ctx in ['snake', 'balanced', 'survival']:
                     count = self.context_episode_counts[ctx]
                     pct = (count / (episode + 1)) * 100
                     ctx_avg = np.mean(self.context_avg_rewards[ctx][-50:]) if self.context_avg_rewards[ctx] else 0
+                    level = self.context_levels[ctx]
+                    completions = self.level_completions[ctx]
+
+                    # Get current level config
+                    level_config = self.reward_systems[ctx].get_current_level_config(level)
                     print(f"    {ctx:8s}: {count:4d} episodes ({pct:4.1f}%) - avg reward: {ctx_avg:6.2f}")
+                    print(f"              Level {level} ({level_config['pellets']}p/{level_config['enemies']}e) - {completions} completions")
+
+                # ENHANCEMENT 4: Continuous Motivation Stats
+                print("\n  Reward System Stats (current episode):")
+                for ctx in ['snake', 'balanced', 'survival']:
+                    stats = self.reward_systems[ctx].get_stats()
+                    print(f"    {ctx:8s}: Combo={stats['combo']}, Streak={stats['streak']}, Pellets={stats['pellets']}")
 
                 # ENHANCEMENT 3: Q-Head Dominance Analysis
                 if (episode + 1) % (log_every * 2) == 0:
@@ -642,12 +909,15 @@ class AdvancedContextAwareTrainer:
                 avg_q = data['avg_q_values'][head]
                 print(f"    {head:8s}: {pct:5.1f}% | avg Q={avg_q:6.2f}")
 
-        # Final context summary
-        print("\nFINAL CONTEXT PERFORMANCE:")
+        # Final context summary with level progression
+        print("\nFINAL CONTEXT PERFORMANCE & LEVELS:")
         for ctx in ['snake', 'balanced', 'survival']:
             count = self.context_episode_counts[ctx]
             avg = np.mean(self.context_avg_rewards[ctx][-100:]) if len(self.context_avg_rewards[ctx]) >= 100 else np.mean(self.context_avg_rewards[ctx])
+            level = self.context_levels[ctx]
+            completions = self.level_completions[ctx]
             print(f"  {ctx:8s}: {count:4d} episodes - avg reward: {avg:6.2f}")
+            print(f"            Final Level: {level} - Total Completions: {completions}")
 
     def save(self, base_path):
         """Save models with Q-head analysis"""
@@ -663,9 +933,11 @@ class AdvancedContextAwareTrainer:
             'context_episode_counts': self.context_episode_counts,
             'context_avg_rewards': self.context_avg_rewards,
             'steps_done': self.steps_done,
-            'q_head_analysis': self.q_head_analyzer.get_summary(),  # NEW
+            'q_head_analysis': self.q_head_analyzer.get_summary(),
             'planning_count': self.planning_count,
-            'reactive_count': self.reactive_count
+            'reactive_count': self.reactive_count,
+            'context_levels': self.context_levels,  # NEW
+            'level_completions': self.level_completions  # NEW
         }
         torch.save(policy_checkpoint, f"{base_path}_policy.pth")
 
@@ -700,11 +972,15 @@ class AdvancedContextAwareTrainer:
         self.steps_done = checkpoint.get('steps_done', 0)
         self.planning_count = checkpoint.get('planning_count', 0)
         self.reactive_count = checkpoint.get('reactive_count', 0)
+        self.context_levels = checkpoint.get('context_levels', {'snake': 1, 'balanced': 1, 'survival': 1})
+        self.level_completions = checkpoint.get('level_completions', {'snake': 0, 'balanced': 0, 'survival': 0})
 
         episodes_trained = len(self.episode_rewards)
         print(f"  Resuming from episode {episodes_trained}")
         print(f"  Steps completed: {self.steps_done}")
         print(f"  Avg reward (last 100): {np.mean(self.episode_rewards[-100:]) if len(self.episode_rewards) >= 100 else np.mean(self.episode_rewards):.2f}")
+        print(f"  Levels: Snake={self.context_levels['snake']}, Balanced={self.context_levels['balanced']}, Survival={self.context_levels['survival']}")
+        print(f"  Completions: Snake={self.level_completions['snake']}, Balanced={self.level_completions['balanced']}, Survival={self.level_completions['survival']}")
 
         # Load world model if provided
         if world_model_path and os.path.exists(world_model_path):

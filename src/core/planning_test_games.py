@@ -71,26 +71,34 @@ class PlanningGameAgent:
 # =============================================================================
 
 class SnakeGame:
-    def __init__(self, size=15):
+    def __init__(self, size=20, num_pellets=10):  # MATCH TRAINING: 20x20 grid, multiple pellets
         self.size = size
+        self.num_pellets = num_pellets
         self.reset()
 
     def reset(self):
         center = self.size // 2
         self.snake = [(center, center)]
-        self.food = self._place_food()
+        self.food_positions = self._place_all_food()  # MATCH TRAINING: Multiple pellets
         self.direction = (0, -1)
         self.score = 0
         self.steps = 0
-        self.max_steps = 200
+        self.max_steps = 1000  # MATCH TRAINING: 1000 steps
+        self.lives = 3  # MATCH TRAINING: 3 lives
+        self.total_collected = 0  # Track total food collected
         self.done = False
         return self._get_game_state()
 
-    def _place_food(self):
-        while True:
+    def _place_all_food(self):
+        """Place multiple food pellets at once (MATCH TRAINING)"""
+        food = set()
+        attempts = 0
+        while len(food) < self.num_pellets and attempts < 5000:
             pos = (random.randint(1, self.size-2), random.randint(1, self.size-2))
-            if pos not in self.snake:
-                return pos
+            if pos not in self.snake and pos not in food:
+                food.add(pos)
+            attempts += 1
+        return food
 
     def _get_game_state(self):
         walls = set()
@@ -108,9 +116,9 @@ class SnakeGame:
         return {
             'agent_pos': self.snake[0],
             'walls': walls,
-            'rewards': [self.food],
+            'rewards': list(self.food_positions),  # MATCH TRAINING: Multiple pellets
             'entities': entities,
-            'grid_size': (self.size, self.size),  # FIX: Add grid_size for observer
+            'grid_size': (self.size, self.size),
             'score': self.score,
             'done': self.done
         }
@@ -127,27 +135,56 @@ class SnakeGame:
         head = self.snake[0]
         new_head = (head[0] + self.direction[0], head[1] + self.direction[1])
 
-        reward = -0.01
+        # MATCH TRAINING: Reward movement (+0.1)
+        reward = 0.1
 
+        # Wall collision
         if (new_head[0] <= 0 or new_head[0] >= self.size-1 or
             new_head[1] <= 0 or new_head[1] >= self.size-1):
-            self.done = True
-            reward = -1
-            return self._get_game_state(), reward, True
+            # MATCH TRAINING: Lives system instead of instant death
+            self.lives -= 1
+            reward = -50.0  # MATCH TRAINING: -50 penalty
+            if self.lives <= 0:
+                self.done = True
+                reward -= 100.0  # MATCH TRAINING: -100 for game over
+                return self._get_game_state(), reward, True
+            else:
+                # Respawn at center
+                center = self.size // 2
+                self.snake = [(center, center)]
+                self.direction = (0, -1)
+                return self._get_game_state(), reward, False
 
+        # Self collision
         if new_head in self.snake:
-            self.done = True
-            reward = -1
-            return self._get_game_state(), reward, True
+            self.lives -= 1
+            reward = -50.0
+            if self.lives <= 0:
+                self.done = True
+                reward -= 100.0
+                return self._get_game_state(), reward, True
+            else:
+                center = self.size // 2
+                self.snake = [(center, center)]
+                self.direction = (0, -1)
+                return self._get_game_state(), reward, False
 
         self.snake.insert(0, new_head)
 
-        if new_head == self.food:
+        # Food collection - MATCH TRAINING: Check set of pellets, don't respawn
+        if new_head in self.food_positions:
+            self.food_positions.remove(new_head)
             self.score += 1
-            reward = 1.0
-            self.food = self._place_food()
+            self.total_collected += 1
+            reward = 20.0  # MATCH TRAINING: +20 for food
         else:
             self.snake.pop()
+
+        # Victory condition - MATCH TRAINING: All pellets collected
+        if len(self.food_positions) == 0:
+            self.done = True
+            reward += 200.0  # MATCH TRAINING: +200 victory bonus
+            return self._get_game_state(), reward, True
 
         self.steps += 1
         if self.steps >= self.max_steps:
@@ -157,7 +194,7 @@ class SnakeGame:
 
 
 class PacManGame:
-    def __init__(self, size=15):
+    def __init__(self, size=20):  # MATCH TRAINING: 20x20 grid
         self.size = size
         self.reset()
 
@@ -196,7 +233,9 @@ class PacManGame:
 
         self.score = 0
         self.steps = 0
-        self.max_steps = 300
+        self.max_steps = 1000  # MATCH TRAINING: 1000 steps
+        self.lives = 3  # MATCH TRAINING: 3 lives
+        self.total_collected = 0  # Track total pellets
         self.done = False
 
         return self._get_game_state()
@@ -227,16 +266,20 @@ class PacManGame:
         dx, dy = [(0, -1), (0, 1), (-1, 0), (1, 0)][action]
         new_pos = (self.pacman_pos[0] + dx, self.pacman_pos[1] + dy)
 
-        reward = -0.01
+        # MATCH TRAINING: Reward movement (+0.1)
+        reward = 0.1
 
         if new_pos not in self.walls:
             self.pacman_pos = new_pos
 
+        # Pellet collection
         if self.pacman_pos in self.pellets:
             self.pellets.remove(self.pacman_pos)
             self.score += 1
-            reward = 1.0
+            self.total_collected += 1
+            reward = 20.0  # MATCH TRAINING: +20 for pellets
 
+        # Move ghosts
         for ghost in self.ghosts:
             gx, gy = ghost['pos']
             px, py = self.pacman_pos
@@ -258,15 +301,25 @@ class PacManGame:
                     ghost['pos'] = choice[1]
                     ghost['dir'] = choice[2]
 
+        # Ghost collision - MATCH TRAINING: Lives system
         for ghost in self.ghosts:
             if ghost['pos'] == self.pacman_pos:
-                self.done = True
-                reward = -1
-                return self._get_game_state(), reward, True
+                self.lives -= 1
+                reward = -50.0  # MATCH TRAINING: -50 penalty
+                if self.lives <= 0:
+                    self.done = True
+                    reward -= 100.0  # MATCH TRAINING: -100 for game over
+                    return self._get_game_state(), reward, True
+                else:
+                    # Respawn at center
+                    center = self.size // 2
+                    self.pacman_pos = (center, center)
+                    return self._get_game_state(), reward, False
 
+        # Victory condition - MATCH TRAINING: +200 bonus
         if len(self.pellets) == 0:
             self.done = True
-            reward = 10.0
+            reward = 200.0  # MATCH TRAINING: +200 victory bonus
 
         self.steps += 1
         if self.steps >= self.max_steps:
@@ -276,7 +329,7 @@ class PacManGame:
 
 
 class DungeonGame:
-    def __init__(self, size=20):
+    def __init__(self, size=20):  # MATCH TRAINING: 20x20 grid
         self.size = size
         self.reset()
 
@@ -314,7 +367,9 @@ class DungeonGame:
 
         self.score = 0
         self.steps = 0
-        self.max_steps = 500
+        self.max_steps = 1000  # MATCH TRAINING: 1000 steps
+        self.lives = 3  # MATCH TRAINING: 3 lives
+        self.total_collected = 0  # Track total treasures collected
         self.done = False
 
         return self._get_game_state()
@@ -345,17 +400,21 @@ class DungeonGame:
         dx, dy = [(0, -1), (0, 1), (-1, 0), (1, 0)][action]
         new_pos = (self.player_pos[0] + dx, self.player_pos[1] + dy)
 
-        reward = -0.01
+        # MATCH TRAINING: Reward movement (+0.1)
+        reward = 0.1
 
         if new_pos not in self.walls:
             self.player_pos = new_pos
 
+        # Treasure collection - MATCH TRAINING: +200 for treasure
         if self.player_pos == self.treasure:
             self.score += 10
-            reward = 10.0
+            self.total_collected += 1
+            reward = 200.0  # MATCH TRAINING: +200 victory bonus
             self.done = True
             return self._get_game_state(), reward, True
 
+        # Move enemies
         for enemy in self.enemies:
             ex, ey = enemy['pos']
 
@@ -370,11 +429,19 @@ class DungeonGame:
                 enemy['pos'] = choice[0]
                 enemy['dir'] = choice[1]
 
+        # Enemy collision - MATCH TRAINING: Lives system
         for enemy in self.enemies:
             if enemy['pos'] == self.player_pos:
-                self.done = True
-                reward = -1
-                return self._get_game_state(), reward, True
+                self.lives -= 1
+                reward = -50.0  # MATCH TRAINING: -50 penalty
+                if self.lives <= 0:
+                    self.done = True
+                    reward -= 100.0  # MATCH TRAINING: -100 for game over
+                    return self._get_game_state(), reward, True
+                else:
+                    # Respawn at start position
+                    self.player_pos = (1, 1)
+                    return self._get_game_state(), reward, False
 
         self.steps += 1
         if self.steps >= self.max_steps:
@@ -390,9 +457,9 @@ def test_all_games(agent, num_episodes=10):
     print()
 
     games = {
-        'Snake': SnakeGame(size=15),
-        'Pac-Man': PacManGame(size=15),
-        'Dungeon': DungeonGame(size=20)
+        'Snake': SnakeGame(size=20),  # MATCH TRAINING: 20x20
+        'Pac-Man': PacManGame(size=20),  # MATCH TRAINING: 20x20
+        'Dungeon': DungeonGame(size=20)  # MATCH TRAINING: 20x20
     }
 
     results = {}
