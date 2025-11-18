@@ -104,7 +104,7 @@ def main():
 
     # Load agent
     print(f"Loading model: {args.model_path}")
-    checkpoint = torch.load(args.model_path, map_location='cpu')
+    checkpoint = torch.load(args.model_path, map_location='cpu', weights_only=False)
 
     agent = ContextAwareDQN(obs_dim=95, action_dim=4)
     agent.load_state_dict(checkpoint['policy_net'])

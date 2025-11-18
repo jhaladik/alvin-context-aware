@@ -46,7 +46,7 @@ class ContextAwareVisualRunner:
         self.current_context_name = "Unknown"
 
         if model_path and os.path.exists(model_path):
-            checkpoint = torch.load(model_path, map_location='cpu')
+            checkpoint = torch.load(model_path, map_location='cpu', weights_only=False)
             self.agent = ContextAwareDQN(obs_dim=95, action_dim=4)
             self.agent.load_state_dict(checkpoint['policy_net'])
             self.agent.eval()
