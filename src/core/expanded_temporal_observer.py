@@ -35,11 +35,12 @@ class ExpandedTemporalObserver:
     Total: ~180 dims (vs 92 dims baseline)
     """
 
-    def __init__(self, num_rays=16, ray_length=15):
+    def __init__(self, num_rays=16, ray_length=15, verbose=False):
         """
         Args:
             num_rays: Number of ray-cast directions (default 16, was 8)
             ray_length: Max sensing distance (default 15, was 10)
+            verbose: Print initialization info (default False to reduce log spam)
         """
         self.num_rays = num_rays
         self.ray_length = ray_length
@@ -80,14 +81,15 @@ class ExpandedTemporalObserver:
         # Total observation dimension
         self.obs_dim = self.current_features + self.delta_features + self.multi_scale_features
 
-        print(f"Expanded Temporal Observer initialized:")
-        print(f"  Rays: {num_rays} (angular resolution: {360//num_rays}°)")
-        print(f"  Ray length: {ray_length} tiles")
-        print(f"  Current features: {self.current_features} dims")
-        print(f"  Delta features: {self.delta_features} dims")
-        print(f"  Multi-scale temporal: {self.multi_scale_features} dims")
-        print(f"  Total observation: {self.obs_dim} dims")
-        print(f"  Expansion: +{self.obs_dim - 92} dims vs baseline (92 dims)")
+        if verbose:
+            print(f"Expanded Temporal Observer initialized:")
+            print(f"  Rays: {num_rays} (angular resolution: {360//num_rays}°)")
+            print(f"  Ray length: {ray_length} tiles")
+            print(f"  Current features: {self.current_features} dims")
+            print(f"  Delta features: {self.delta_features} dims")
+            print(f"  Multi-scale temporal: {self.multi_scale_features} dims")
+            print(f"  Total observation: {self.obs_dim} dims")
+            print(f"  Expansion: +{self.obs_dim - 92} dims vs baseline (92 dims)")
 
         # Multi-scale temporal buffers
         self.micro_buffer = deque(maxlen=5)    # Last 5 frames (immediate patterns)
