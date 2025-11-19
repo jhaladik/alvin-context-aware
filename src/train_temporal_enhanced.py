@@ -198,14 +198,19 @@ def run_episode(agent, observer, game, optimizer=None, buffer=None,
             current_q, _ = agent.get_q_values(states)
             current_q = current_q.gather(1, actions.unsqueeze(1)).squeeze(1)
 
+            # Clip Q-values to prevent explosion
+            current_q = torch.clamp(current_q, -1000, 1000)
+
             # Compute target Q values
             with torch.no_grad():
                 next_q, _ = agent.get_q_values(next_states)
+                next_q = torch.clamp(next_q, -1000, 1000)  # Clip target Q-values too
                 next_q_max = next_q.max(1)[0]
                 target_q = rewards_batch + gamma * next_q_max * (1 - dones)
+                target_q = torch.clamp(target_q, -1000, 1000)  # Clip targets
 
-            # Compute loss
-            loss = nn.functional.mse_loss(current_q, target_q)
+            # Compute loss (use Huber loss - more robust to outliers than MSE)
+            loss = nn.functional.smooth_l1_loss(current_q, target_q)
 
             # Optimize (only enhancement parameters)
             optimizer.zero_grad()
@@ -238,8 +243,8 @@ def main():
                        help='Use ghost ensemble prediction')
     parser.add_argument('--freeze-base', action='store_true', default=True,
                        help='Freeze base agent weights')
-    parser.add_argument('--lr', type=float, default=0.0001,
-                       help='Learning rate for enhancement layers')
+    parser.add_argument('--lr', type=float, default=0.00001,
+                       help='Learning rate for enhancement layers (default: 0.00001)')
     parser.add_argument('--test-freq', type=int, default=10,
                        help='Test every N episodes')
     parser.add_argument('--gamma', type=float, default=0.99,

@@ -55,6 +55,19 @@ class TemporalBufferEnhancement(nn.Module):
             nn.Linear(128, obs_dim)  # Enhanced observation
         )
 
+        # Initialize weights with small values to prevent explosion
+        self._initialize_weights()
+
+    def _initialize_weights(self):
+        """Initialize all layers with small weights to prevent Q-value explosion"""
+        for module in [self.micro_encoder, self.meso_encoder, self.uncertainty_net, self.fusion]:
+            for layer in module:
+                if isinstance(layer, nn.Linear):
+                    # Xavier/Glorot initialization with small gain
+                    nn.init.xavier_uniform_(layer.weight, gain=0.01)
+                    if layer.bias is not None:
+                        nn.init.constant_(layer.bias, 0)
+
     def update_buffers(self, obs):
         """Add new observation to temporal buffers"""
         self.micro_buffer.append(obs)
