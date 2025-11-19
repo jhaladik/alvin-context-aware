@@ -56,9 +56,10 @@ cd src && python train_temporal_enhanced.py \
   --episodes 100 \
   --use-ensemble \
   --freeze-base \
-  --lr 0.0001 \
   --test-freq 10
 ```
+
+Note: Learning rate defaults to 0.00001 (optimized for stability)
 
 **Option B: Run in background with logging**
 
@@ -68,7 +69,6 @@ cd src && python train_temporal_enhanced.py \
   --episodes 100 \
   --use-ensemble \
   --freeze-base \
-  --lr 0.0001 \
   --test-freq 10 \
   2>&1 | tee ../logs/temporal_enhanced_100ep_$(date +%Y%m%d_%H%M%S).log &
 ```
@@ -286,9 +286,9 @@ if uncertainty > 0.4:  # Was 0.6
 ### Issue: Avg Score decreasing
 
 **Cause:** Overfitting or learning rate too high
-**Fix 1:** Reduce learning rate:
+**Fix 1:** Reduce learning rate (already at 0.00001 by default):
 ```bash
---lr 0.00005  # Half of default
+--lr 0.000005  # Even more conservative if needed
 ```
 
 **Fix 2:** Stop early if plateau detected
@@ -342,12 +342,12 @@ Episodes 80-100: Convergence, score ~32-36
 
 **Start training (foreground):**
 ```bash
-cd src && python train_temporal_enhanced.py --base-model ../checkpoints/faith_evolution_20251119_152049_best_policy.pth --episodes 100 --use-ensemble --freeze-base --lr 0.0001 --test-freq 10
+cd src && python train_temporal_enhanced.py --base-model ../checkpoints/faith_evolution_20251119_152049_best_policy.pth --episodes 100 --use-ensemble --freeze-base --test-freq 10
 ```
 
 **Start training (background with logging):**
 ```bash
-cd src && python train_temporal_enhanced.py --base-model ../checkpoints/faith_evolution_20251119_152049_best_policy.pth --episodes 100 --use-ensemble --freeze-base --lr 0.0001 --test-freq 10 2>&1 | tee ../logs/temporal_enhanced_100ep_$(date +%Y%m%d_%H%M%S).log &
+cd src && python train_temporal_enhanced.py --base-model ../checkpoints/faith_evolution_20251119_152049_best_policy.pth --episodes 100 --use-ensemble --freeze-base --test-freq 10 2>&1 | tee ../logs/temporal_enhanced_100ep_$(date +%Y%m%d_%H%M%S).log &
 ```
 
 **Monitor progress:**
