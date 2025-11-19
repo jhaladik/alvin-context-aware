@@ -187,12 +187,12 @@ def run_episode(agent, observer, game, optimizer=None, buffer=None,
             if transitions is None:
                 continue
 
-            # Unpack transitions
-            states = torch.FloatTensor([t[0] for t in transitions])
-            actions = torch.LongTensor([t[1] for t in transitions])
-            rewards_batch = torch.FloatTensor([t[2] for t in transitions])
-            next_states = torch.FloatTensor([t[3] for t in transitions])
-            dones = torch.FloatTensor([t[4] for t in transitions])
+            # Unpack transitions (use numpy stacking for performance)
+            states = torch.FloatTensor(np.array([t[0] for t in transitions]))
+            actions = torch.LongTensor(np.array([t[1] for t in transitions]))
+            rewards_batch = torch.FloatTensor(np.array([t[2] for t in transitions]))
+            next_states = torch.FloatTensor(np.array([t[3] for t in transitions]))
+            dones = torch.FloatTensor(np.array([t[4] for t in transitions]))
 
             # Compute current Q values
             current_q, _ = agent.get_q_values(states)
