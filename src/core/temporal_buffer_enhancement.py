@@ -61,29 +61,37 @@ class TemporalBufferEnhancement(nn.Module):
         self.meso_buffer.append(obs)
 
     def extract_temporal_features(self):
-        """Extract features from buffered history"""
+        """Extract features from buffered history
+
+        Returns: (micro_features, meso_features) - both 1D tensors (64,)
+        """
         # Micro features (all 5 frames)
         if len(self.micro_buffer) == 5:
-            # Ensure all are tensors and stack them
-            frames = [f if isinstance(f, torch.Tensor) else torch.FloatTensor(f)
-                     for f in self.micro_buffer]
-            micro_tensor = torch.cat(frames, dim=-1)
-            if len(micro_tensor.shape) == 1:
-                micro_tensor = micro_tensor.unsqueeze(0)
-            micro_features = self.micro_encoder(micro_tensor).squeeze(0)
+            # Ensure all are tensors and flatten them
+            frames = []
+            for f in self.micro_buffer:
+                if isinstance(f, torch.Tensor):
+                    frames.append(f.flatten())
+                else:
+                    frames.append(torch.FloatTensor(f).flatten())
+
+            micro_tensor = torch.cat(frames, dim=0).unsqueeze(0)  # (1, obs_dim*5)
+            micro_features = self.micro_encoder(micro_tensor).squeeze(0)  # (64,)
         else:
             micro_features = torch.zeros(64)
 
         # Meso features (sample every 5th frame)
         if len(self.meso_buffer) >= 50:
             sampled = [self.meso_buffer[i] for i in range(0, 50, 5)]
-            # Ensure all are tensors
-            sampled = [f if isinstance(f, torch.Tensor) else torch.FloatTensor(f)
-                      for f in sampled]
-            meso_tensor = torch.cat(sampled, dim=-1)
-            if len(meso_tensor.shape) == 1:
-                meso_tensor = meso_tensor.unsqueeze(0)
-            meso_features = self.meso_encoder(meso_tensor).squeeze(0)
+            frames = []
+            for f in sampled:
+                if isinstance(f, torch.Tensor):
+                    frames.append(f.flatten())
+                else:
+                    frames.append(torch.FloatTensor(f).flatten())
+
+            meso_tensor = torch.cat(frames, dim=0).unsqueeze(0)  # (1, obs_dim*10)
+            meso_features = self.meso_encoder(meso_tensor).squeeze(0)  # (64,)
         else:
             meso_features = torch.zeros(64)
 
@@ -94,10 +102,18 @@ class TemporalBufferEnhancement(nn.Module):
         How uncertain are we about predictions?
 
         High variance in recent frames = high uncertainty
+
+        Args:
+            micro_features: (64,) tensor
+            meso_features: (64,) tensor
+
+        Returns:
+            uncertainty: scalar tensor
         """
-        combined = torch.cat([micro_features, meso_features])
-        uncertainty = self.uncertainty_net(combined)
-        return uncertainty
+        combined = torch.cat([micro_features, meso_features])  # (128,)
+        combined = combined.unsqueeze(0)  # (1, 128)
+        uncertainty = self.uncertainty_net(combined)  # (1, 1)
+        return uncertainty.squeeze()  # scalar
 
     def enhance_observation(self, current_obs):
         """
@@ -105,33 +121,39 @@ class TemporalBufferEnhancement(nn.Module):
 
         Handles both single observations and batches
 
-        Returns: (enhanced_obs, uncertainty)
+        Args:
+            current_obs: (obs_dim,) for single or (batch, obs_dim) for batch
+
+        Returns:
+            enhanced_obs: same shape as input
+            uncertainty: scalar tensor
         """
         # Check if batch or single observation
         is_batch = len(current_obs.shape) == 2
         batch_size = current_obs.shape[0] if is_batch else 1
 
-        # Get temporal features
+        # Get temporal features (always returns (64,) tensors)
         micro_features, meso_features = self.extract_temporal_features()
 
-        # Expand features to match batch size if needed
+        # Compute uncertainty (single value regardless of batch)
+        uncertainty = self.compute_uncertainty(micro_features, meso_features)
+
+        # Expand features to match batch size
         if is_batch:
             micro_features = micro_features.unsqueeze(0).expand(batch_size, -1)
             meso_features = meso_features.unsqueeze(0).expand(batch_size, -1)
+            obs_for_fusion = current_obs  # Already (batch, obs_dim)
         else:
-            # Add batch dimension for consistency
-            current_obs = current_obs.unsqueeze(0)
+            micro_features = micro_features.unsqueeze(0)  # (1, 64)
+            meso_features = meso_features.unsqueeze(0)  # (1, 64)
+            obs_for_fusion = current_obs.unsqueeze(0)  # (1, obs_dim)
 
-        # Compute uncertainty
-        uncertainty = self.compute_uncertainty(micro_features[0] if is_batch else micro_features,
-                                               meso_features[0] if is_batch else meso_features)
-
-        # Fuse everything
+        # Fuse everything - all are now (batch, dim)
         enhanced = self.fusion(torch.cat([
-            current_obs,
-            micro_features,
-            meso_features
-        ], dim=-1))
+            obs_for_fusion,   # (batch, obs_dim)
+            micro_features,   # (batch, 64)
+            meso_features     # (batch, 64)
+        ], dim=-1))  # (batch, obs_dim+64+64)
 
         # Remove batch dimension if input was single
         if not is_batch:

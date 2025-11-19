@@ -48,12 +48,28 @@ class TemporalEnhancedAgent(nn.Module):
         self.trainable_params = list(self.temporal_enhancement.parameters())
 
     def get_q_values(self, obs):
-        """Get Q-values with temporal enhancement"""
-        # Enhance observation
+        """Get Q-values with temporal enhancement
+
+        Args:
+            obs: (obs_dim,) for single or (batch, obs_dim) for batch
+
+        Returns:
+            q_values: (1, action_dim) for single or (batch, action_dim) for batch
+            uncertainty: scalar tensor
+        """
+        # Enhance observation (preserves input shape)
         enhanced_obs, uncertainty = self.temporal_enhancement.enhance_observation(obs)
 
         # Get Q-values from base agent
-        q_values = self.base_agent.get_combined_q(enhanced_obs.unsqueeze(0))
+        # enhanced_obs is (obs_dim,) for single or (batch, obs_dim) for batch
+        is_batch = len(enhanced_obs.shape) == 2
+
+        if is_batch:
+            # Already has batch dimension
+            q_values = self.base_agent.get_combined_q(enhanced_obs)
+        else:
+            # Need to add batch dimension
+            q_values = self.base_agent.get_combined_q(enhanced_obs.unsqueeze(0))
 
         return q_values, uncertainty
 
