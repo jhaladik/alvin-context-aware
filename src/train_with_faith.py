@@ -612,6 +612,43 @@ class FaithBasedEvolutionaryTrainer(AdvancedContextAwareTrainer):
         torch.save(checkpoint, policy_path)
         print(f"  [FAITH DATA] Saved: {self.faith_action_count} actions, {len(self.faith_discoveries)} discoveries, {len(self.entity_world_model.discovered_entities)} entities")
 
+    def load(self, policy_path, world_model_path=None):
+        """Load checkpoint WITH faith system data restoration"""
+        # Call parent load first
+        super().load(policy_path, world_model_path)
+
+        # Load faith system data
+        checkpoint = torch.load(policy_path, map_location='cpu', weights_only=False)
+
+        # Restore faith counters
+        self.faith_action_count = checkpoint.get('faith_count', 0)
+        self.faith_discoveries = checkpoint.get('faith_discoveries', [])
+
+        # Restore faith population
+        if 'faith_population' in checkpoint:
+            for i, pattern_data in enumerate(checkpoint['faith_population']):
+                if i < len(self.faith_population.patterns):
+                    self.faith_population.patterns[i].fitness = pattern_data.get('fitness', 0)
+                    self.faith_population.patterns[i].age = pattern_data.get('age', 0)
+                    self.faith_population.patterns[i].discoveries = pattern_data.get('discoveries', 0)
+                    # Restore behavior_types if available
+                    if 'behavior_types' in pattern_data:
+                        self.faith_population.patterns[i].behavior_types = pattern_data['behavior_types']
+
+        # Restore entity world model
+        if 'entity_world_model' in checkpoint:
+            self.entity_world_model.load_state_dict(checkpoint['entity_world_model'])
+
+        # Restore patterns and mechanics
+        if 'discovered_patterns' in checkpoint:
+            self.discovered_patterns = checkpoint['discovered_patterns']
+        if 'confirmed_mechanics' in checkpoint:
+            self.confirmed_mechanics = checkpoint['confirmed_mechanics']
+
+        print(f"  [FAITH DATA] Restored: {self.faith_action_count} actions, {len(self.faith_discoveries)} discoveries")
+        if 'entity_types_discovered' in checkpoint:
+            print(f"  [ENTITIES] Restored: {checkpoint['entity_types_discovered']} entity types")
+
 
 def main():
     parser = argparse.ArgumentParser(description='Train Faith-Based Evolutionary Agent')
