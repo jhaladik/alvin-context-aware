@@ -567,6 +567,51 @@ class FaithBasedEvolutionaryTrainer(AdvancedContextAwareTrainer):
                 for name, desc in mechanics.items():
                     print(f"    - {desc}")
 
+    def save(self, base_path):
+        """Save models WITH faith system data"""
+        # Call parent save first
+        super().save(base_path)
+
+        # Load the policy checkpoint and add faith data
+        policy_path = f"{base_path}_policy.pth"
+        checkpoint = torch.load(policy_path, map_location='cpu', weights_only=False)
+
+        # Add faith system data
+        checkpoint['faith_count'] = self.faith_action_count
+        checkpoint['faith_discoveries'] = self.faith_discoveries
+        checkpoint['faith_discovery_count'] = len(self.faith_discoveries)
+
+        # Save faith population
+        checkpoint['faith_population'] = [
+            {
+                'pattern_id': p.pattern_id,
+                'fitness': p.fitness,
+                'age': p.age,
+                'discoveries': p.discoveries,
+                'behavior_types': p.behavior_types
+            }
+            for p in self.faith_population.patterns
+        ]
+        checkpoint['faith_population_size'] = len(self.faith_population.patterns)
+
+        # Entity discovery stats
+        checkpoint['entity_types_discovered'] = len(self.entity_world_model.discovered_entities)
+        checkpoint['entity_world_model'] = self.entity_world_model.state_dict()
+
+        # Pattern detection stats
+        total_patterns = sum(len(patterns) for patterns in self.discovered_patterns.values())
+        checkpoint['patterns_detected'] = total_patterns
+        checkpoint['discovered_patterns'] = self.discovered_patterns
+
+        # Mechanic detection stats
+        total_mechanics = sum(len(mechs) for mechs in self.confirmed_mechanics.values())
+        checkpoint['mechanics_confirmed'] = total_mechanics
+        checkpoint['confirmed_mechanics'] = self.confirmed_mechanics
+
+        # Re-save with faith data
+        torch.save(checkpoint, policy_path)
+        print(f"  [FAITH DATA] Saved: {self.faith_action_count} actions, {len(self.faith_discoveries)} discoveries, {len(self.entity_world_model.discovered_entities)} entities")
+
 
 def main():
     parser = argparse.ArgumentParser(description='Train Faith-Based Evolutionary Agent')
