@@ -61,9 +61,9 @@ class FaithPattern(nn.Module):
 
     def should_override(self, step: int, state: torch.Tensor) -> bool:
         """Decide if this pattern should override Q-learning at this step"""
-        # Probabilistic activation based on frequency
-        if random.random() > self.activation_frequency:
-            return False
+        # FIXED: Simplified to respect faith_freq parameter in caller
+        # The caller already controls overall faith frequency (e.g., 30%)
+        # This just decides if THIS pattern activates when selected
 
         # Commitment-based: Once activated, persist for commitment_length
         if hasattr(self, '_active_until'):
@@ -73,8 +73,8 @@ class FaithPattern(nn.Module):
                 delattr(self, '_active_until')
                 return False
 
-        # Activate new commitment period
-        if random.random() < 0.1:  # 10% chance to start new commitment
+        # Start new commitment period with higher probability (50% vs old 10%)
+        if random.random() < 0.5:
             self._active_until = step + self.commitment_length
             return True
 

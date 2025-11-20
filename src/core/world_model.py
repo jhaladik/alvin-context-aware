@@ -50,21 +50,21 @@ class WorldModelNetwork(nn.Module):
         # Reward prediction network
         # Predicts: scalar reward
         self.reward_predictor = nn.Sequential(
-            nn.Linear(input_dim, 128),
+            nn.Linear(input_dim, 64),
             nn.ReLU(),
-            nn.Linear(128, 64),
+            nn.Linear(64, 32),
             nn.ReLU(),
-            nn.Linear(64, 1)
+            nn.Linear(32, 1)
         )
 
         # Done prediction network
         # Predicts: probability of episode ending
         self.done_predictor = nn.Sequential(
-            nn.Linear(input_dim, 128),
+            nn.Linear(input_dim, 64),
             nn.ReLU(),
-            nn.Linear(128, 64),
+            nn.Linear(64, 32),
             nn.ReLU(),
-            nn.Linear(64, 1),
+            nn.Linear(32, 1),
             nn.Sigmoid()  # Output probability 0-1
         )
 

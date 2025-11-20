@@ -38,21 +38,18 @@ Expanded (183-dim)    | 187 → 128 → 183        | ✗ 0.68x compression
 ```python
 # BEFORE (insufficient capacity)
 hidden_dim = 128
-reward_predictor: 187 → 64 → 32 → 1
-done_predictor: 187 → 64 → 32 → 1
+State predictor:  187 → 128 → 128 → 183  (0.68x compression ✗)
+Reward predictor: 187 → 64 → 32 → 1     (unchanged)
+Done predictor:   187 → 64 → 32 → 1     (unchanged)
 
 # AFTER (sufficient capacity)
 hidden_dim = 256
-reward_predictor: 187 → 128 → 64 → 1
-done_predictor: 187 → 128 → 64 → 1
+State predictor:  187 → 256 → 256 → 183  (1.37x expansion ✓)
+Reward predictor: 187 → 64 → 32 → 1     (unchanged)
+Done predictor:   187 → 64 → 32 → 1     (unchanged)
 ```
 
-#### New Architecture:
-```
-State predictor:  187 → 256 → 256 → 183  (1.37x expansion ✓)
-Reward predictor: 187 → 128 → 64 → 1     (2x capacity ✓)
-Done predictor:   187 → 128 → 64 → 1     (2x capacity ✓)
-```
+**Note:** Only the state predictor hidden_dim changed (128 → 256). Reward/done predictors remain the same size as they were not the bottleneck.
 
 ## Expected Impact
 
