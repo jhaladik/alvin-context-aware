@@ -22,12 +22,12 @@ class WorldModelNetwork(nn.Module):
     This is the "imagination" module - agent can simulate futures.
     """
 
-    def __init__(self, state_dim=92, action_dim=4, hidden_dim=128):
+    def __init__(self, state_dim=92, action_dim=4, hidden_dim=256):
         """
         Args:
-            state_dim: Dimension of temporal observation (92)
+            state_dim: Dimension of temporal observation (92 standard, 180 expanded)
             action_dim: Number of possible actions (4)
-            hidden_dim: Hidden layer size
+            hidden_dim: Hidden layer size (256 for expanded, 128 for standard)
         """
         super().__init__()
 
@@ -50,21 +50,21 @@ class WorldModelNetwork(nn.Module):
         # Reward prediction network
         # Predicts: scalar reward
         self.reward_predictor = nn.Sequential(
-            nn.Linear(input_dim, 64),
+            nn.Linear(input_dim, 128),
             nn.ReLU(),
-            nn.Linear(64, 32),
+            nn.Linear(128, 64),
             nn.ReLU(),
-            nn.Linear(32, 1)
+            nn.Linear(64, 1)
         )
 
         # Done prediction network
         # Predicts: probability of episode ending
         self.done_predictor = nn.Sequential(
-            nn.Linear(input_dim, 64),
+            nn.Linear(input_dim, 128),
             nn.ReLU(),
-            nn.Linear(64, 32),
+            nn.Linear(128, 64),
             nn.ReLU(),
-            nn.Linear(32, 1),
+            nn.Linear(64, 1),
             nn.Sigmoid()  # Output probability 0-1
         )
 
