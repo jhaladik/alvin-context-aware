@@ -590,22 +590,32 @@ def main():
         if os.path.exists(world_model_path):
             print(f"Loading world model: {world_model_path}")
 
+            # Load checkpoint first to detect architecture
+            wm_checkpoint = torch.load(world_model_path, map_location='cpu', weights_only=False)
+
+            # Detect hidden_dim from checkpoint (state_predictor.0.weight shape is [hidden_dim, input_dim])
+            state_dict = wm_checkpoint['model']
+            if 'state_predictor.0.weight' in state_dict:
+                hidden_dim = state_dict['state_predictor.0.weight'].shape[0]
+                print(f"  Detected world model architecture: hidden_dim={hidden_dim}")
+            else:
+                hidden_dim = 256  # Default for new checkpoints
+                print(f"  Using default architecture: hidden_dim={hidden_dim}")
+
             # Try entity discovery world model first
             try:
                 from core.entity_discovery import EntityDiscoveryWorldModel
-                world_model = EntityDiscoveryWorldModel(obs_dim=183, action_dim=4)  # EXPANDED: 183 vs 95
-                wm_checkpoint = torch.load(world_model_path, map_location='cpu', weights_only=False)
-                world_model.load_state_dict(wm_checkpoint['model'])
+                world_model = EntityDiscoveryWorldModel(obs_dim=183, action_dim=4)
+                world_model.load_state_dict(state_dict)
                 world_model.eval()
                 print(f"  Entity Discovery World Model loaded (EXPANDED: 183 dims)")
-            except:
+            except Exception as e:
                 # Fall back to standard world model
                 from core.world_model import WorldModelNetwork
-                world_model = WorldModelNetwork(state_dim=183, action_dim=4)  # EXPANDED: 183 vs 95
-                wm_checkpoint = torch.load(world_model_path, map_location='cpu', weights_only=False)
-                world_model.load_state_dict(wm_checkpoint['model'])
+                world_model = WorldModelNetwork(state_dim=183, action_dim=4, hidden_dim=hidden_dim)
+                world_model.load_state_dict(state_dict)
                 world_model.eval()
-                print(f"  Standard World Model loaded (EXPANDED: 183 dims)")
+                print(f"  Standard World Model loaded (EXPANDED: 183 dims, hidden={hidden_dim})")
 
             print(f"  Planning: {args.planning_freq*100:.0f}% frequency, horizon {args.planning_horizon}")
         else:
