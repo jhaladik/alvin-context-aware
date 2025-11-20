@@ -168,8 +168,8 @@ class FaithPopulation:
 
         # Evolution parameters
         self.generation = 0
-        self.mutation_rate = 0.1
-        self.elite_size = 10  # Top N to keep
+        self.mutation_rate = 0.4  # Increased from 0.1 to break uniformity
+        self.elite_size = 4  # Reduced from 10 to allow more evolution (20% instead of 50%)
         self.tournament_size = 3
 
         # Tracking

@@ -660,6 +660,7 @@ class FaithBasedEvolutionaryTrainer(AdvancedContextAwareTrainer):
             for p in self.faith_population.patterns
         ]
         checkpoint['faith_population_size'] = len(self.faith_population.patterns)
+        checkpoint['faith_generation'] = self.faith_population.generation  # Save generation counter
 
         # Entity discovery stats
         checkpoint['entity_types_discovered'] = len(self.entity_world_model.discovered_entities)
@@ -701,6 +702,10 @@ class FaithBasedEvolutionaryTrainer(AdvancedContextAwareTrainer):
                     # Restore behavior_types if available
                     if 'behavior_types' in pattern_data:
                         self.faith_population.patterns[i].behavior_types = pattern_data['behavior_types']
+
+            # Restore generation counter
+            self.faith_population.generation = checkpoint.get('faith_generation', 0)
+            print(f"  [FAITH] Restored generation: {self.faith_population.generation}")
 
         # Restore entity world model
         if 'entity_world_model' in checkpoint:
