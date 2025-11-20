@@ -948,8 +948,8 @@ class ExpandedFaithVisualRunner:
                     self.last_action_source = 'planning'
                     self.action_counts['planning'] += 1
                 else:
-                    # Reactive action
-                    action = self.agent.get_action(obs_with_context, epsilon=0.0)
+                    # Reactive action (use epsilon=0.01 to match training!)
+                    action = self.agent.get_action(obs_with_context, epsilon=0.01)
                     self.last_action_source = 'reactive'
                     self.action_counts['reactive'] += 1
 
