@@ -20,10 +20,13 @@ wheels/
 .installed.cfg
 *.egg
 
-# PyTorch
+# PyTorch - Exclude all checkpoints by default
 *.pth
 *.pt
-!checkpoints/*.pth  # Keep checkpoint files
+
+# Keep only final/demo checkpoints (force-add with git add -f)
+!src/checkpoints/faith_fixed_20251120_162417_final_*.pth
+!src/checkpoints/faith_evolution_20251120_194555_best_*.pth
 
 # Jupyter Notebook
 .ipynb_checkpoints
@@ -59,3 +62,12 @@ htmlcov/
 # Temporary files
 *.tmp
 *.bak
+
+# Training logs and test results
+training_diversity_fix.log
+config_test_quick.log
+test_fixed_model_results.txt
+warehouse_fixed_test.txt
+old_vs_fixed_comparison.log
+TESTING_IN_PROGRESS.md
+COMPREHENSIVE_TEST_RESULTS.md
