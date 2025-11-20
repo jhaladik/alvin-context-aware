@@ -1,0 +1,119 @@
+pygame-ce 2.5.5 (SDL 2.32.6, Python 3.11.7)
+================================================================================
+WAREHOUSE FAITH SCENARIOS DEMONSTRATION
+================================================================================
+Model: checkpoints/faith_fixed_20251120_162417_final_policy.pth
+Episodes per scenario: 20
+
+MODEL ARCHITECTURE DETECTED:
+  Type: EXPANDED (16 rays × 15 tiles)
+  Observation dims: 183 (180 + 3 context)
+  Multi-scale temporal: Enabled
+
+TRAINING INFO:
+  Episodes trained: 700
+  Steps: 271,977
+
+OBSERVER:
+  Type: expanded
+  Observation dims: 180
+
+WORLD MODEL:
+  Type: FIXED Context-Aware (bottleneck removed)
+  Loaded: Yes (obs=180, hidden=256)
+  Planning frequency: 20%
+
+FAITH SYSTEM:
+  Population: 20 patterns
+  Frequency: 30%
+
+================================================================================
+TESTING: Hidden Shortcut
+================================================================================
+Description: Discover conditional passageways based on supervisor position
+Episodes: 20
+
+RESULTS:
+  Average packages collected: 10.65 ± 4.42
+  Max packages: 21
+  Average steps: 500.0
+  Average collisions per episode: 189.00
+
+ACTION DISTRIBUTION:
+  Faith:     26.4% (  2635 actions)
+  Planning:  14.1% (  1412 actions)
+  Reactive:  59.5% (  5953 actions)
+
+HIDDEN MECHANIC DISCOVERIES:
+  Total mechanics discovered: 1
+    - conditional_shortcut: Walls passable when supervisor distance > 5
+      Discovered at step: 32
+
+SHORTCUT USAGE:
+  Total shortcut uses: 772
+  Average per episode: 38.60
+
+================================================================================
+TESTING: Charging Station Dilemma
+================================================================================
+Description: Discover optimal battery management timing
+Episodes: 20
+
+RESULTS:
+  Average packages collected: 4.25 ± 1.58
+  Max packages: 7
+  Average steps: 500.0
+  Average collisions per episode: 288.00
+
+ACTION DISTRIBUTION:
+  Faith:     29.6% (  2957 actions)
+  Planning:  13.7% (  1371 actions)
+  Reactive:  56.7% (  5672 actions)
+
+HIDDEN MECHANIC DISCOVERIES:
+  No hidden mechanics discovered (need more exploration)
+
+================================================================================
+TESTING: Priority Zone System
+================================================================================
+Description: Discover time-sensitive package priorities
+Episodes: 20
+
+RESULTS:
+  Average packages collected: 6.30 ± 2.26
+  Max packages: 11
+  Average steps: 500.0
+  Average collisions per episode: 290.00
+
+ACTION DISTRIBUTION:
+  Faith:     29.8% (  2977 actions)
+  Planning:  13.0% (  1295 actions)
+  Reactive:  57.3% (  5728 actions)
+
+HIDDEN MECHANIC DISCOVERIES:
+  Total mechanics discovered: 3
+    - red_package_decay: Red packages decay -2 reward per 10 steps
+      Discovered at step: 30
+    - green_package_chain: Consecutive green packages give chain bonus
+      Discovered at step: 50
+    - priority_strategy: Optimal: Red first, green chains, blue fill
+      Discovered at step: 50
+
+PRIORITY STRATEGY:
+  Episodes with optimal strategy: 18/20
+
+================================================================================
+OVERALL SUMMARY
+================================================================================
+
+Total mechanic discoveries: 4
+
+Scenario Performance:
+  hidden_shortcut     :  10.65 avg packages
+  charging_station    :   4.25 avg packages
+  priority_zone       :   6.30 avg packages
+
+Action Distribution (Overall):
+  Faith:     28.6%
+  Planning:  13.6%
+  Reactive:  57.8%

@@ -1,0 +1,140 @@
+{
+  "model": "checkpoints/faith_fixed_20251120_162417_final_policy.pth",
+  "architecture": "expanded",
+  "world_model_type": "fixed",
+  "episodes_per_config": 10,
+  "test_date": "2025-11-20T17:36:50.684232",
+  "results": {
+    "pacman": [
+      {
+        "avg_score": 11.7,
+        "std_score": 8.579627031520658,
+        "max_score": 25,
+        "avg_steps": 149.8,
+        "action_counts": {
+          "faith": 0,
+          "planning": 0,
+          "reactive": 1498
+        },
+        "scores": [
+          13,
+          22,
+          4,
+          1,
+          5,
+          7,
+          4,
+          12,
+          24,
+          25
+        ],
+        "config": {
+          "faith_freq": 0.0,
+          "planning_freq": 0.0,
+          "planning_horizon": 20,
+          "name": "F0_P0_H20"
+        }
+      },
+      {
+        "avg_score": 18.5,
+        "std_score": 11.517378173872732,
+        "max_score": 38,
+        "avg_steps": 168.8,
+        "action_counts": {
+          "faith": 0,
+          "planning": 312,
+          "reactive": 1376
+        },
+        "scores": [
+          5,
+          19,
+          8,
+          31,
+          17,
+          30,
+          4,
+          8,
+          25,
+          38
+        ],
+        "config": {
+          "faith_freq": 0.0,
+          "planning_freq": 0.2,
+          "planning_horizon": 20,
+          "name": "F0_P20_H20"
+        }
+      },
+      {
+        "avg_score": 16.6,
+        "std_score": 6.468384651518491,
+        "max_score": 26,
+        "avg_steps": 73.2,
+        "action_counts": {
+          "faith": 208,
+          "planning": 0,
+          "reactive": 524
+        },
+        "scores": [
+          17,
+          19,
+          13,
+          23,
+          17,
+          24,
+          26,
+          5,
+          8,
+          14
+        ],
+        "config": {
+          "faith_freq": 0.3,
+          "planning_freq": 0.0,
+          "planning_horizon": 20,
+          "name": "F30_P0_H20"
+        }
+      },
+      {
+        "avg_score": 8.5,
+        "std_score": 4.153311931459037,
+        "max_score": 16,
+        "avg_steps": 41.9,
+        "action_counts": {
+          "faith": 135,
+          "planning": 78,
+          "reactive": 206
+        },
+        "scores": [
+          7,
+          4,
+          3,
+          8,
+          4,
+          14,
+          16,
+          12,
+          9,
+          8
+        ],
+        "config": {
+          "faith_freq": 0.3,
+          "planning_freq": 0.2,
+          "planning_horizon": 20,
+          "name": "F30_P20_H20"
+        }
+      }
+    ]
+  },
+  "config_scores": {
+    "F0_P0_H20": 11.7,
+    "F0_P20_H20": 18.5,
+    "F30_P0_H20": 16.6,
+    "F30_P20_H20": 8.5
+  },
+  "best_overall": {
+    "name": "F0_P20_H20",
+    "score": 18.5,
+    "faith_freq": 0.0,
+    "planning_freq": 0.2,
+    "planning_horizon": 20
+  }
+}

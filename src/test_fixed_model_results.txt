@@ -1,0 +1,115 @@
+======================================================================
+EXPANDED FAITH-BASED EVOLUTIONARY AGENT TEST
+======================================================================
+Model: checkpoints/faith_fixed_20251120_162417_final_policy.pth
+Episodes per game: 50
+Faith analysis: DISABLED
+Observer: EXPANDED (180 dims + 3 context = 183 total)
+Planning horizon: 20 steps
+
+TRAINING INFORMATION:
+  Episodes trained: 700
+  Steps: 271977
+
+  Training action distribution:
+    Faith:      0.0% (0)
+    Planning:  19.7% (37,477)
+    Reactive:  80.3% (152,968)
+
+  Faith discoveries during training: 178
+    Avg discovery reward: 96.84
+
+  Training context distribution:
+    snake   : 212 episodes
+    balanced: 358 episodes
+    survival: 130 episodes
+
+  Level progression:
+    snake   : Level 5 (30 completions)
+    balanced: Level 5 (10 completions)
+    survival: Level 4 (3 completions)
+
+Loading world model: checkpoints/faith_fixed_20251120_162417_final_world_model.pth
+  Detected: FIXED context-aware world model
+  Context-Aware World Model loaded (obs=180, hidden=256)
+  Planning: 20% frequency, horizon 20
+
+
+======================================================================
+TESTING: SNAKE GAME (EXPANDED OBSERVER)
+======================================================================
+
+======================================================================
+SNAKE TEST RESULTS (EXPANDED OBSERVER)
+======================================================================
+Episodes: 50
+Average Score: 2.98 ± 0.93
+Max Score: 5
+Min Score: 1
+Average Steps: 54.7
+
+Context Distribution:
+  snake   :  2737 steps (100.0%)
+  balanced:     0 steps (  0.0%)
+  survival:     0 steps (  0.0%)
+
+======================================================================
+TESTING: PAC-MAN GAME (EXPANDED OBSERVER)
+======================================================================
+
+======================================================================
+PAC-MAN TEST RESULTS (EXPANDED OBSERVER)
+======================================================================
+Episodes: 50
+Average Score: 17.62 ± 11.18
+Max Score: 40
+Min Score: 0
+Average Steps: 109.5
+
+Context Distribution:
+  snake   :  4367 steps ( 79.8%)
+  balanced:  1090 steps ( 19.9%)
+  survival:    16 steps (  0.3%)
+
+======================================================================
+TESTING: DUNGEON GAME (EXPANDED OBSERVER)
+======================================================================
+
+======================================================================
+DUNGEON TEST RESULTS (EXPANDED OBSERVER)
+======================================================================
+Episodes: 50
+Average Score: 0.00 ± 0.00
+Max Score: 0
+Min Score: 0
+Average Steps: 985.5
+
+Context Distribution:
+  snake   : 46465 steps ( 94.3%)
+  balanced:  2809 steps (  5.7%)
+  survival:     0 steps (  0.0%)
+
+======================================================================
+OVERALL SUMMARY (EXPANDED OBSERVER)
+======================================================================
+
+Game Performance:
+  snake   :   2.98 avg score
+  pacman  :  17.62 avg score
+  dungeon :   0.00 avg score
+
+======================================================================
+CONTEXT ADAPTATION CHECK
+======================================================================
+
+Snake game:
+  Dominant context: snake (100.0%)
+    [EXCELLENT] Correctly identifies collection-focused context
+
+Pacman game:
+  Dominant context: snake (79.8%)
+    [INFO] Context distribution varies during gameplay
+
+Dungeon game:
+  Dominant context: snake (94.3%)
+    [INFO] Context distribution varies during gameplay
