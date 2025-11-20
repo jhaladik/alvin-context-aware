@@ -26,6 +26,7 @@ from context_aware_agent import (
 )
 from core.expanded_temporal_observer import ExpandedTemporalObserver  # EXPANDED: 180 dims!
 from core.world_model import WorldModelNetwork
+from core.context_aware_world_model import ContextAwareWorldModel
 
 # Import faith system modules
 from core.faith_system import FaithPattern, FaithPopulation
@@ -48,6 +49,99 @@ GOLD = (255, 215, 0)
 PURPLE = (128, 0, 128)
 MAGENTA = (255, 0, 255)
 TEAL = (0, 128, 128)
+
+
+class ContinuousMotivationRewardSystem:
+    """
+    Reward shaping system to provide continuous motivation signals.
+    Matches the system used during training for consistent performance.
+    """
+    def __init__(self, context_name='balanced'):
+        self.context_name = context_name
+        self.combo_count = 0
+        self.combo_timer = 0
+        self.combo_timeout = 10
+        self.steps_alive = 0
+        self.last_pellet_dist = None
+
+    def reset(self):
+        """Reset for new episode"""
+        self.combo_count = 0
+        self.combo_timer = 0
+        self.steps_alive = 0
+        self.last_pellet_dist = None
+
+    def calculate_reward(self, env_reward, info, nearest_pellet_dist, nearest_enemy_dist):
+        """
+        Calculate enhanced reward with 5 components:
+        1. Approach gradient: +0.5 closer, -0.1 farther
+        2. Combo system: base_pellet (10.0) + combo_count * 2.0
+        3. Risk multiplier: 3x if enemy dist < 3.0, 2x if < 5.0
+        4. Survival streak: +0.05/step + milestones [50,100,200,300,400,500]
+        5. Death penalty: -(50.0 + steps_alive * 0.1)
+        """
+        breakdown = {
+            'env': env_reward,
+            'approach': 0.0,
+            'combo': 0.0,
+            'risk': 0.0,
+            'streak': 0.0,
+            'death_penalty': 0.0
+        }
+
+        # Update combo timer
+        if self.combo_timer > 0:
+            self.combo_timer -= 1
+            if self.combo_timer == 0:
+                self.combo_count = 0
+
+        # 1. Approach gradient (continuous movement motivation)
+        if nearest_pellet_dist is not None and self.last_pellet_dist is not None:
+            if nearest_pellet_dist < self.last_pellet_dist:
+                breakdown['approach'] = 0.5  # Moving closer
+            elif nearest_pellet_dist > self.last_pellet_dist:
+                breakdown['approach'] = -0.1  # Moving away
+        self.last_pellet_dist = nearest_pellet_dist
+
+        # 2. Combo system (reward collection)
+        collected_reward = info.get('collected_reward', False)
+        if collected_reward or env_reward > 5:
+            # Base pellet reward
+            base_pellet = 10.0
+
+            # Combo multiplier
+            combo_bonus = self.combo_count * 2.0
+
+            # Risk multiplier
+            risk_mult = 1.0
+            if nearest_enemy_dist is not None:
+                if nearest_enemy_dist < 3.0:
+                    risk_mult = 3.0  # High risk, high reward
+                elif nearest_enemy_dist < 5.0:
+                    risk_mult = 2.0  # Medium risk
+
+            breakdown['combo'] = (base_pellet + combo_bonus) * risk_mult
+            breakdown['risk'] = 0.0  # Already in combo
+
+            # Update combo
+            self.combo_count += 1
+            self.combo_timer = self.combo_timeout
+
+        # 3. Survival streak (staying alive motivation)
+        self.steps_alive += 1
+        breakdown['streak'] = 0.05  # Base survival reward
+
+        # Milestone bonuses
+        if self.steps_alive in [50, 100, 200, 300, 400, 500]:
+            breakdown['streak'] += 20.0
+
+        # 4. Death penalty
+        died = info.get('died', False)
+        if died:
+            breakdown['death_penalty'] = -(50.0 + self.steps_alive * 0.1)
+
+        total_reward = sum(breakdown.values())
+        return total_reward, breakdown
 
 
 class ExpandedFaithVisualRunner:
@@ -83,6 +177,11 @@ class ExpandedFaithVisualRunner:
         self.mechanics_confirmed = {}
         self.action_counts = {'faith': 0, 'planning': 0, 'reactive': 0}
 
+        # Continuous motivation reward system (matches training)
+        self.reward_system = None  # Will be initialized in switch_game
+        self.total_reward = 0.0  # Track continuous motivation reward
+        self.reward_breakdown = {}  # Show reward components
+
         if model_path and os.path.exists(model_path):
             checkpoint = torch.load(model_path, map_location='cpu', weights_only=False)
             # EXPANDED: 183 dims (180 observer + 3 context)
@@ -96,9 +195,30 @@ class ExpandedFaithVisualRunner:
 
             if use_planning and os.path.exists(world_model_path):
                 print(f"Loading world model for planning: {world_model_path}")
-                # EXPANDED: 183 dims
-                self.world_model = WorldModelNetwork(state_dim=183, action_dim=4)
                 wm_checkpoint = torch.load(world_model_path, map_location='cpu', weights_only=False)
+
+                # Auto-detect world model architecture
+                world_model_type = checkpoint.get('world_model_type', 'standard')
+
+                if world_model_type == 'context_aware_fixed':
+                    # FIXED context-aware world model
+                    print(f"  Detected: FIXED context-aware world model")
+                    obs_dim = checkpoint.get('world_model_obs_dim', 180)
+                    context_dim = checkpoint.get('world_model_context_dim', 3)
+                    state_dict = wm_checkpoint['model']
+                    hidden_dim = state_dict['obs_predictor.0.weight'].shape[0] if 'obs_predictor.0.weight' in state_dict else 256
+
+                    self.world_model = ContextAwareWorldModel(
+                        obs_dim=obs_dim,
+                        context_dim=context_dim,
+                        action_dim=4,
+                        hidden_dim=hidden_dim
+                    )
+                else:
+                    # Standard world model
+                    print(f"  Detected: Standard world model")
+                    self.world_model = WorldModelNetwork(state_dim=183, action_dim=4)
+
                 self.world_model.load_state_dict(wm_checkpoint['model'])
                 self.world_model.eval()
                 print(f"  Planning ENABLED: {planning_freq*100:.0f}% frequency, horizon {planning_horizon} (EXPANDED)")
@@ -209,6 +329,11 @@ class ExpandedFaithVisualRunner:
         self.last_action = -1
         self.last_action_source = 'reactive'
         self._update_temporal_info()
+
+        # Initialize/reset continuous motivation system
+        self.reward_system = ContinuousMotivationRewardSystem(context_name=context_name)
+        self.total_reward = 0.0
+        self.reward_breakdown = {}
 
         # Reset faith tracking
         self.recent_discoveries = []
@@ -333,6 +458,74 @@ class ExpandedFaithVisualRunner:
             return np.random.randint(4)
         else:
             return np.random.randint(4)
+
+    def _calculate_nearest_pellet_dist(self):
+        """Calculate Manhattan distance to nearest pellet/food"""
+        if self.game_state is None:
+            return None
+
+        # Get agent position based on game type
+        if hasattr(self.current_game, 'snake'):
+            agent_x, agent_y = self.current_game.snake[0]
+        elif hasattr(self.current_game, 'pac_pos'):
+            agent_x, agent_y = self.current_game.pac_pos
+        elif hasattr(self.current_game, 'player_pos'):
+            agent_x, agent_y = self.current_game.player_pos
+        else:
+            return None
+
+        # Get pellet/food positions based on game type
+        pellet_positions = []
+        if hasattr(self.current_game, 'food_positions'):
+            pellet_positions = self.current_game.food_positions
+        elif hasattr(self.current_game, 'pellets'):
+            pellet_positions = self.current_game.pellets
+        elif hasattr(self.current_game, 'treasures'):
+            pellet_positions = self.current_game.treasures
+
+        if not pellet_positions:
+            return None
+
+        # Find nearest pellet (Manhattan distance)
+        min_dist = float('inf')
+        for px, py in pellet_positions:
+            dist = abs(agent_x - px) + abs(agent_y - py)
+            min_dist = min(min_dist, dist)
+
+        return min_dist if min_dist != float('inf') else None
+
+    def _calculate_nearest_enemy_dist(self):
+        """Calculate Manhattan distance to nearest enemy/ghost"""
+        if self.game_state is None:
+            return None
+
+        # Get agent position based on game type
+        if hasattr(self.current_game, 'snake'):
+            agent_x, agent_y = self.current_game.snake[0]
+        elif hasattr(self.current_game, 'pac_pos'):
+            agent_x, agent_y = self.current_game.pac_pos
+        elif hasattr(self.current_game, 'player_pos'):
+            agent_x, agent_y = self.current_game.player_pos
+        else:
+            return None
+
+        # Get enemy positions based on game type
+        enemy_positions = []
+        if hasattr(self.current_game, 'ghosts'):
+            enemy_positions = self.current_game.ghosts
+        elif hasattr(self.current_game, 'enemies'):
+            enemy_positions = self.current_game.enemies
+
+        if not enemy_positions:
+            return None
+
+        # Find nearest enemy (Manhattan distance)
+        min_dist = float('inf')
+        for ex, ey in enemy_positions:
+            dist = abs(agent_x - ex) + abs(agent_y - ey)
+            min_dist = min(min_dist, dist)
+
+        return min_dist if min_dist != float('inf') else None
 
     def draw_snake(self):
         """Draw snake game"""
@@ -543,6 +736,7 @@ class ExpandedFaithVisualRunner:
         stats = [
             f'Score: {self.score}',
             f'Steps: {self.steps}',
+            f'Reward: {self.total_reward:.1f}',  # Continuous motivation!
         ]
 
         if hasattr(self.current_game, 'lives'):
@@ -696,6 +890,9 @@ class ExpandedFaithVisualRunner:
                         self.observer.reset()
                         self.score = 0
                         self.steps = 0
+                        if self.reward_system:
+                            self.reward_system.reset()
+                        self.total_reward = 0.0
                         self._update_temporal_info()
                         print("Reset!")
                     elif event.key == pygame.K_1:
@@ -782,6 +979,22 @@ class ExpandedFaithVisualRunner:
                 self.steps = self.current_game.steps
                 self.last_action = action
 
+                # Calculate continuous motivation reward (matches training!)
+                if self.reward_system:
+                    nearest_pellet_dist = self._calculate_nearest_pellet_dist()
+                    nearest_enemy_dist = self._calculate_nearest_enemy_dist()
+
+                    enhanced_reward, self.reward_breakdown = self.reward_system.calculate_reward(
+                        reward,
+                        info={'collected_reward': reward > 5, 'died': done},
+                        nearest_pellet_dist=nearest_pellet_dist,
+                        nearest_enemy_dist=nearest_enemy_dist
+                    )
+
+                    self.total_reward += enhanced_reward
+                else:
+                    self.total_reward += reward
+
                 # Track discoveries
                 if reward > 0 and self.last_action_source == 'faith':
                     self.recent_discoveries.append({
@@ -796,6 +1009,7 @@ class ExpandedFaithVisualRunner:
 
                 if done:
                     print(f"{self.game_name} finished! Score: {self.score} | Context: {self.current_context_name}")
+                    print(f"  Total Reward (continuous motivation): {self.total_reward:.2f}")
                     print(f"  Faith: {self.action_counts['faith']} | " +
                           f"Planning: {self.action_counts['planning']} | " +
                           f"Reactive: {self.action_counts['reactive']}")
@@ -807,6 +1021,9 @@ class ExpandedFaithVisualRunner:
                     self.observer.reset()
                     self.score = 0
                     self.steps = 0
+                    if self.reward_system:
+                        self.reward_system.reset()
+                    self.total_reward = 0.0
 
             # Draw
             self.draw()
